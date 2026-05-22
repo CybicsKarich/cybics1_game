@@ -287,6 +287,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           }
         }
       }
+      _medals.add(Medal(id: 0, x: _levelLength * 0.22, y: _floorY - 150));
       _medals.add(Medal(id: 1, x: _levelLength * 0.435, y: _floorY - 30));
     } 
     else if (_currentLevel == 3) {
@@ -419,7 +420,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           }
         }
       }
-      _medals.add(Medal(id: 0, x: _levelLength * 0.15, y: _floorY - 120));
     }
   }
 
