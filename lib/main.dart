@@ -709,7 +709,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           ],
         ),
         Padding(
-          padding: const EdgeInsets.bottom(20.0),
+          padding: const EdgeInsets.only(bottom: 20.0),
           child: _buildBtn('Назад', () {
             setState(() { _state = GameState.mainMenu; });
           }, isSecondary: true, minWidth: 200),
@@ -955,7 +955,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         color: isSecondary ? const Color(0xFF334155) : null,
         boxShadow: [
           BoxShadow(
-            color: isSecondary ? Colors.black25 : const Color(0xFF06B6D4).withOpacity(0.3),
+            color: isSecondary ? Colors.black.withOpacity(0.25) : const Color(0xFF06B6D4).withOpacity(0.3),
             blurRadius: 10,
             offset: const Offset(0, 5),
           )
