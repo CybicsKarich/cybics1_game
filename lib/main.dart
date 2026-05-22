@@ -175,33 +175,47 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   }
 
   // --- МУЗЫКАЛЬНЫЙ СЕКВЕНСОР MP3 ---
+    // --- МУЗЫКАЛЬНЫЙ СЕКВЕНСОР MP3 (ИСПРАВЛЕННЫЙ) ---
   void _startMusicSequencer() async {
-    // Включаем бесконечный повтор
-    _menuPlayer.setReleaseMode(ReleaseMode.loop);
-    _level1Player.setReleaseMode(ReleaseMode.loop);
-    _level2Player.setReleaseMode(ReleaseMode.loop);
-    _level3Player.setReleaseMode(ReleaseMode.loop);
+    try {
+      // Настраиваем зацикливание треков
+      await _menuPlayer.setReleaseMode(ReleaseMode.loop);
+      await _level1Player.setReleaseMode(ReleaseMode.loop);
+      await _level2Player.setReleaseMode(ReleaseMode.loop);
+      await _level3Player.setReleaseMode(ReleaseMode.loop);
 
-    if (_state == GameState.gameplay) {
-      await _menuPlayer.stop();
-      _stopAllLevelTracks();
+      if (_state == GameState.gameplay) {
+        await _menuPlayer.stop();
+        await _stopAllLevelTracks();
 
-      if (!_isPaused) {
-        if (_currentLevel == 1) await _level1Player.play(AssetSource('level1.mp3'));
-        if (_currentLevel == 2) await _level2Player.play(AssetSource('level2.mp3'));
-        if (_currentLevel == 3) await _level3Player.play(AssetSource('level3.mp3'));
+        if (!_isPaused) {
+          if (_currentLevel == 1) {
+            await _level1Player.play(AssetSource('level1.mp3'));
+          } else if (_currentLevel == 2) {
+            await _level2Player.play(AssetSource('level2.mp3'));
+          } else if (_currentLevel == 3) {
+            await _level3Player.play(AssetSource('level3.mp3'));
+          }
+        }
+      } else {
+        await _stopAllLevelTracks();
+        await _menuPlayer.play(AssetSource('menu.mp3'));
       }
-    } else {
-      _stopAllLevelTracks();
-      await _menuPlayer.play(AssetSource('menu.mp3'));
+    } catch (e) {
+      debugPrint("Ошибка аудиосеквенсора: $e");
     }
   }
 
-  void _stopAllLevelTracks() async {
-    await _level1Player.stop();
-    await _level2Player.stop();
-    await _level3Player.stop();
+  Future<void> _stopAllLevelTracks() async {
+    try {
+      await _level1Player.stop();
+      await _level2Player.stop();
+      await _level3Player.stop();
+    } catch (e) {
+      debugPrint("Ошибка остановки треков: $e");
+    }
   }
+
 
   void _playDeathSound() async {
     // Воспроизведение короткого звука смерти
@@ -273,7 +287,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           }
         }
       }
-      _medals.add(Medal(id: 0, x: _levelLength * 0.22, y: _floorY - 150));
       _medals.add(Medal(id: 1, x: _levelLength * 0.435, y: _floorY - 30));
     } 
     else if (_currentLevel == 3) {
