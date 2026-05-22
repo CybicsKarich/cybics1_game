@@ -218,8 +218,27 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
 
   void _playDeathSound() async {
-    // Воспроизведение короткого звука смерти
-    await _deathPlayer.play(AssetSource('death.mp3'));
+    try {
+      // 1. Мгновенно приглушаем текущий играющий трек уровня до 20% от текущей громкости
+      double reducedVol = (_volume / 100.0) * 0.2;
+      if (_currentLevel == 1) await _level1Player.setVolume(reducedVol);
+      if (_currentLevel == 2) await _level2Player.setVolume(reducedVol);
+      if (_currentLevel == 3) await _level3Player.setVolume(reducedVol);
+
+      // 2. Воспроизводим звук взрыва смерти
+      await _deathPlayer.stop(); 
+      await _deathPlayer.play(AssetSource('death.mp3'));
+
+      // 3. Через 400 миллисекунд возвращаем громкость обратно
+      Timer(const Duration(milliseconds: 400), () async {
+        double normalVol = _volume / 100.0;
+        if (_currentLevel == 1) await _level1Player.setVolume(normalVol);
+        if (_currentLevel == 2) await _level2Player.setVolume(normalVol);
+        if (_currentLevel == 3) await _level3Player.setVolume(normalVol);
+      });
+    } catch (e) {
+      debugPrint("Ошибка приглушения звука при смерти: $e");
+    }
   }
 
   double _seededRandom(int seed) {
