@@ -665,7 +665,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                 _isGodMode ? 'GOD MODE' : 'CYBICS',
                 style: TextStyle(
                   fontSize: 64,
-                  fontWeight: FontWeight.black,
+                  fontWeight: FontWeight.w900, 
                   letterSpacing: 6,
                   color: _isGodMode ? const Color(0xFFE11D48) : const Color(0xFF00F2FE),
                   shadows: [
