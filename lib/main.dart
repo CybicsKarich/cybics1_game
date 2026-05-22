@@ -217,29 +217,40 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   }
 
 
-  void _playDeathSound() async {
+    void _playDeathSound() async {
     try {
-      // 1. Мгновенно приглушаем текущий играющий трек уровня до 20% от текущей громкости
-      double reducedVol = (_volume / 100.0) * 0.2;
-      if (_currentLevel == 1) await _level1Player.setVolume(reducedVol);
-      if (_currentLevel == 2) await _level2Player.setVolume(reducedVol);
-      if (_currentLevel == 3) await _level3Player.setVolume(reducedVol);
-
-      // 2. Воспроизводим звук взрыва смерти
-      await _deathPlayer.stop(); 
+      // 1. Сразу включаем звук взрыва смерти
+      await _deathPlayer.stop();
       await _deathPlayer.play(AssetSource('death.mp3'));
 
-      // 3. Через 400 миллисекунд возвращаем громкость обратно
-      Timer(const Duration(milliseconds: 400), () async {
-        double normalVol = _volume / 100.0;
-        if (_currentLevel == 1) await _level1Player.setVolume(normalVol);
-        if (_currentLevel == 2) await _level2Player.setVolume(normalVol);
-        if (_currentLevel == 3) await _level3Player.setVolume(normalVol);
+      // 2. Определяем, какой плеер сейчас активен
+      AudioPlayer activePlayer;
+      if (_currentLevel == 1) activePlayer = _level1Player;
+      else if (_currentLevel == 2) activePlayer = _level2Player;
+      else activePlayer = _level3Player;
+
+      // 3. Слегка приглушаем его на время взрыва
+      double normalVol = _volume / 100.0;
+      await activePlayer.setVolume(normalVol * 0.2);
+
+      // 4. Перематываем музыку уровня на самое начало (0 секунд)
+      await activePlayer.seek(Duration.zero);
+
+      // 5. Принудительно запускаем воспроизведение трека с нуля!
+      await activePlayer.play(
+        _currentLevel == 1 ? AssetSource('level1.mp3') : 
+        (_currentLevel == 2 ? AssetSource('level2.mp3') : AssetSource('level3.mp3'))
+      );
+
+      // 6. Через 300 миллисекунд возвращаем полную громкость
+      Timer(const Duration(milliseconds: 300), () async {
+        await activePlayer.setVolume(normalVol);
       });
     } catch (e) {
-      debugPrint("Ошибка приглушения звука при смерти: $e");
+      debugPrint("Ошибка перезапуска музыки при смерти: $e");
     }
   }
+
 
   double _seededRandom(int seed) {
     double x = math.sin(seed.toDouble()) * 10000;
