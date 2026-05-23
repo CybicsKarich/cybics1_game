@@ -109,6 +109,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
   double _volume = 50.0;
   bool _showPercent = true;
+  bool _showFps = false; // Переменная для галочки FPS
+  int _fpsCount = 0;     // Итоговое число FPS для отрисовки
+  int _frameCount = 0;   // Временный счетчик кадров
+  DateTime _lastFpsTime = DateTime.now(); // Время последнего замера
 
   // Игровые переменные
   int _currentLevel = 1;
@@ -163,6 +167,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       _attempts3 = _prefs.getInt('cybics_attempts_3') ?? 0;
       _volume = _prefs.getDouble('cybics_volume') ?? 50.0;
       _showPercent = _prefs.getBool('cybics_show_percent') ?? true;
+      _showFps = _prefs.getBool('cybics_show_fps') ?? false;
 
       String? m1 = _prefs.getString('cybics_medals_1');
       if (m1 != null) _savedMedals1 = List<bool>.from(jsonDecode(m1));
@@ -519,6 +524,14 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   }
 
   void _updatePhysics() {
+        // Расчет FPS в реальном времени
+    _frameCount++;
+    DateTime now = DateTime.now();
+    if (now.difference(_lastFpsTime).inSeconds >= 1) {
+      _fpsCount = _frameCount;
+      _frameCount = 0;
+      _lastFpsTime = now;
+    }
     setState(() {
       _player.x += 7.5;
       _cameraX = _player.x - 200;
@@ -921,6 +934,16 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                     _prefs.setBool('cybics_show_percent', _showPercent);
                   },
                 )
+                              const SizedBox(height: 10),
+                CheckboxListTile(
+                  title: const Text('Показывать FPS в игре', style: TextStyle(fontSize: 14)),
+                  value: _showFps,
+                  activeColor: const Color(0xFF00F2FE),
+                  onChanged: (val) {
+                    setState(() { _showFps = val ?? false; });
+                    _prefs.setBool('cybics_show_fps', _showFps);
+                  },
+                ),
               ],
             ),
           ),
@@ -986,6 +1009,23 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               },
             ),
           ),
+                    // Зелёный счётчик FPS (отображается, если включен в настройках)
+          if (_showFps)
+            Positioned(
+              top: 28, // Выравниваем по высоте по центру кнопки паузы
+              right: 80, // Смещаем левее кнопки паузы
+              child: Text(
+                'FPS: $_fpsCount',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF22C55E), // Яркий зелёный цвет
+                  shadows: [
+                    Shadow(blurRadius: 4, color: Colors.black)
+                  ],
+                ),
+              ),
+            ),
           if (_isPaused) _buildPauseOverlay(),
           if (_showNewRecord) _buildNewRecordOverlay(),
           if (_showVictory) _buildVictoryOverlay(),
