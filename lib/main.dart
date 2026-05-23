@@ -483,6 +483,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   void _startLevel() {
     _gameTimer?.cancel();
     setState(() {
+      _isPlaying = true;
       _cameraX = 0;
       _currentProgress = 0;
       _trailParticles.clear();
