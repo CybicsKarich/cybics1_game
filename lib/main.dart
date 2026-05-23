@@ -901,7 +901,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildSettingsMenu() {
+    Widget _buildSettingsMenu() {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -933,8 +933,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                     setState(() { _showPercent = val ?? true; });
                     _prefs.setBool('cybics_show_percent', _showPercent);
                   },
-                )
-                              const SizedBox(height: 10),
+                ),
+                const SizedBox(height: 10),
                 CheckboxListTile(
                   title: const Text('Показывать FPS в игре', style: TextStyle(fontSize: 14)),
                   value: _showFps,
@@ -955,6 +955,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       ),
     );
   }
+
 
   Widget _buildGameplay() {
     return Listener(
