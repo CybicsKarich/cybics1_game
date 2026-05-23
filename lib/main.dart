@@ -60,6 +60,15 @@ class BgItem {
   final double rotSpeed;
   BgItem({required this.x, required this.y, required this.size, required this.speed, required this.angle, required this.rotSpeed});
 }
+class DeathParticle {
+  double x;
+  double y;
+  final double vx;
+  double vy;
+  final double size;
+  double alpha;
+  DeathParticle({required this.x, required this.y, required this.vx, required this.vy, required this.size, required this.alpha});
+}
 
 class Player {
   double x = 100;
@@ -120,6 +129,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   List<Medal> _medals = [];
   List<Offset> _trailParticles = [];
   List<BgItem> _bgItems = [];
+  List<DeathParticle> _deathParticles = [];
   List<int> _collectedThisRun = [];
   int _currentProgress = 0;
   bool _isPressing = false;
@@ -620,17 +630,80 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     });
   }
 
-  void _gameOver() {
-    _gameTimer?.cancel();
+    void _gameOver() {
+    _gameTimer?.cancel(); // Останавливаем основной игровой цикл физики
     _playDeathSound();
+
+    setState(() {
+      _isPlaying = false;       // Кубик перестает двигаться
+      _trailParticles.clear();  // Мгновенно очищаем шлейф
+      _deathParticles.clear();  // Очищаем старые осколки
+
+      // Генерируем 16 квадратных осколков, разлетающихся из центра куба
+      var rand = math.Random();
+      for (int i = 0; i < 16; i++) {
+        double angle = rand.nextDouble() * math.pi * 2;
+        double speed = 2 + rand.nextDouble() * 5;
+        _deathParticles.add(DeathParticle(
+          x: _player.x + _player.size / 2,
+          y: _player.y + _player.size / 2,
+          vx: math.cos(angle) * speed,
+          vy: math.sin(angle) * speed,
+          size: 5 + rand.nextDouble() * 6,
+          alpha: 1.0,
+        ));
+      }
+    });
+
+    // Быстрый цикл анимации разлёта частиц (60 кадров в секунду)
+    Timer? deathAnimTimer;
+    deathAnimTimer = Timer.periodic(const Duration(milliseconds: 16), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      setState(() {
+        for (var p in _deathParticles) {
+          p.x += p.vx;
+          p.y += p.vy;
+          p.vy += 0.15;    // Легкая гравитация тянет осколки вниз
+          p.alpha -= 0.03; // Осколки быстро тают в воздухе
+          if (p.alpha < 0) p.alpha = 0;
+        }
+      });
+    });
+
+    // Спустя 350 мс мгновенно очищаем всё и запускаем новую попытку
+    Timer(const Duration(milliseconds: 350), () {
+      deathAnimTimer?.cancel();
+      setState(() {
+        _deathParticles.clear();
+      });
+      _continueGameOverLogic();
+    });
+  }
+
+  void _continueGameOverLogic() {
     bool isNewRecord = false;
 
-    if (_currentLevel == 1 && _currentProgress > _maxProgress && _currentProgress < 100) {
-      _maxProgress = _currentProgress; _prefs.setInt('cybics_max_progress', _maxProgress); isNewRecord = true;
-    } else if (_currentLevel == 2 && _currentProgress > _maxProgress2 && _currentProgress < 100) {
-      _maxProgress2 = _currentProgress; _prefs.setInt('cybics_max_progress_2', _maxProgress2); isNewRecord = true;
-    } else if (_currentLevel == 3 && _currentProgress > _maxProgress3 && _currentProgress < 100) {
-      _maxProgress3 = _currentProgress; _prefs.setInt('cybics_max_progress_3', _maxProgress3); isNewRecord = true;
+    if (_currentLevel == 1) {
+      if (_currentProgress > _maxProgress && _currentProgress < 100) {
+        _maxProgress = _currentProgress;
+        _prefs.setInt('cybics_max_progress', _maxProgress);
+        isNewRecord = true;
+      }
+    } else if (_currentLevel == 2) {
+      if (_currentProgress > _maxProgress2 && _currentProgress < 100) {
+        _maxProgress2 = _currentProgress;
+        _prefs.setInt('cybics_max_progress_2', _maxProgress2);
+        isNewRecord = true;
+      }
+    } else {
+      if (_currentProgress > _maxProgress3 && _currentProgress < 100) {
+        _maxProgress3 = _currentProgress;
+        _prefs.setInt('cybics_max_progress_3', _maxProgress3);
+        isNewRecord = true;
+      }
     }
 
     if (isNewRecord) {
@@ -874,6 +947,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                 medals: _medals,
                 trailParticles: _trailParticles,
                 bgItems: _bgItems,
+                deathParticles: _deathParticles,
+                isPlaying: _isPlaying,
                 currentLevel: _currentLevel,
                 levelLength: _levelLength,
                 floorY: _floorY,
@@ -1037,6 +1112,8 @@ class GamePainter extends CustomPainter {
   final List<Medal> medals;
   final List<Offset> trailParticles;
   final List<BgItem> bgItems;
+  final bool isPlaying;
+  final List<DeathParticle> deathParticles;
   final int currentLevel;
   final double levelLength;
   final double floorY;
@@ -1051,6 +1128,8 @@ class GamePainter extends CustomPainter {
     required this.medals,
     required this.trailParticles,
     required this.bgItems,
+    required this.isPlaying,
+    required this.deathParticles,
     required this.currentLevel,
     required this.levelLength,
     required this.floorY,
@@ -1213,36 +1292,40 @@ class GamePainter extends CustomPainter {
       canvas.restore();
     }
 
-    // 7. Отрисовка игрока (Кубик или Корабль)
-    canvas.save();
-    canvas.translate(player.x - cameraX + player.size / 2, player.y + player.size / 2);
-    canvas.rotate(player.rotation);
+    
+        // 7. Отрисовка кубика или самолётика (Исчезает при смерти)
+    if (isPlaying) { // <-- НАШЕ НОВОЕ ДОБАВЛЕНИЕ
+      canvas.save();
+      canvas.translate(player.x - cameraX + player.size / 2, player.y + player.size / 2);
+      canvas.rotate(player.rotation);
 
-    if (player.isShip) {
-      paint.color = const Color(0xFFC084FC);
-      Path shipPath = Path()
-        ..moveTo(-player.size / 2, 0)
-        ..lineTo(player.size / 2, -player.size / 4)
-        ..lineTo(player.size / 4, player.size / 2)
-        ..close();
-      canvas.drawPath(shipPath, paint);
+      if (player.isShip) {
+        paint.color = const Color(0xFFC084FC);
+        Path shipPath = Path()
+          ..moveTo(-player.size / 2, 0)
+          ..lineTo(player.size / 2, -player.size / 4)
+          ..lineTo(player.size / 4, player.size / 2)
+          ..close();
+        canvas.drawPath(shipPath, paint);
 
-      paint.style = PaintingStyle.stroke;
-      paint.color = Colors.white;
-      paint.strokeWidth = 2;
-      canvas.drawPath(shipPath, paint);
-      paint.style = PaintingStyle.fill;
-    } else {
-      paint.color = const Color(0xFF00F2FE);
-      canvas.drawRect(Rect.fromCircle(center: Offset.zero, radius: player.size / 2), paint);
+        paint.style = PaintingStyle.stroke;
+        paint.color = Colors.white;
+        paint.strokeWidth = 2;
+        canvas.drawPath(shipPath, paint);
+        paint.style = PaintingStyle.fill;
+      } else {
+        paint.color = const Color(0xFF00F2FE);
+        canvas.drawRect(Rect.fromCircle(center: Offset.zero, radius: player.size / 2), paint);
 
-      paint.style = PaintingStyle.stroke;
-      paint.color = const Color(0xFF0F172A);
-      paint.strokeWidth = 4;
-      canvas.drawRect(Rect.fromCircle(center: Offset.zero, radius: player.size * 0.33), paint);
-      paint.style = PaintingStyle.fill;
-    }
-    canvas.restore();
+        paint.style = PaintingStyle.stroke;
+        paint.color = const Color(0xFF0F172A);
+        paint.strokeWidth = 4;
+        canvas.drawRect(Rect.fromCircle(center: Offset.zero, radius: player.size * 0.33), paint);
+        paint.style = PaintingStyle.fill;
+      }
+      canvas.restore();
+    } // <-- КОНЕЦ БЛОКА ИСЧЕЗНОВЕНИЯ ИГРОКА
+
 
     // 8. Фиолетовые порталы смены режима
     if (currentLevel == 2 || currentLevel == 3) {
@@ -1308,7 +1391,31 @@ class GamePainter extends CustomPainter {
       )..layout();
       textPainter.paint(canvas, Offset(barX + barW / 2 - textPainter.width / 2, barY + barH / 2 - textPainter.height / 2));
     }
-
+    // --- ОТРИСОВКА ОСКОЛКОВ КУБА НА ХОЛСТЕ (ПЕРЕВОД НА DART) ---
+    for (var p in deathParticles) {
+      if (p.alpha > 0) {
+        canvas.save();
+        
+        // Подстраиваем цвет под текущий режим (фиолетовый самолётик или голубой куб)
+        paint.color = player.isShip 
+            ? const Color(0xFFC084FC).withOpacity(p.alpha) 
+            : const Color(0xFF00F2FE).withOpacity(p.alpha);
+        paint.style = PaintingStyle.fill;
+        
+        // Отрисовываем тело осколка-квадратика
+        final Rect pRect = Rect.fromLTWH(p.x - cameraX - p.size / 2, p.y - p.size / 2, p.size, p.size);
+        canvas.drawRect(pRect, paint);
+        
+        // Белая аккуратная обводка
+        paint.color = Colors.white.withOpacity(p.alpha);
+        paint.style = PaintingStyle.stroke;
+        paint.strokeWidth = 1;
+        canvas.drawRect(pRect, paint);
+        
+        canvas.restore();
+      }
+    }
+    // --- КОНЕЦ ОТРИСОВКИ ОСКОЛКОВ ---
     canvas.restore(); // Сбрасываем глобальный scale, перед выходом из drawGame
   }
 
