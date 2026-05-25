@@ -70,6 +70,13 @@ class DeathParticle {
   DeathParticle({required this.x, required this.y, required this.vx, required this.vy, required this.size, required this.alpha});
 }
 
+class GameOrb {
+  final double x;
+  final double y;
+  bool collected;
+  GameOrb({required this.x, required this.y, this.collected = false});
+}
+
 class Player {
   double x = 100;
   double y = 0;
@@ -80,6 +87,7 @@ class Player {
   bool isGrounded = true;
   bool isShip = false;
   double rotation = 0;
+  bool isUpsideDown = false;
 }
 
 class GameScreen extends StatefulWidget {
@@ -94,17 +102,19 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   
   // Хранилище настроек и рекордов
   late SharedPreferences _prefs;
-  int _maxProgress = 0, _maxProgress2 = 0, _maxProgress3 = 0;
-  int _attempts1 = 0, _attempts2 = 0, _attempts3 = 0;
+  int _maxProgress = 0, _maxProgress2 = 0, _maxProgress3 = 0, _maxProgress4 = 0;
+  int _attempts1 = 0, _attempts2 = 0, _attempts3 = 0, _attempts4 = 0;
   List<bool> _savedMedals1 = [false];
   List<bool> _savedMedals2 = [false, false];
   List<bool> _savedMedals3 = [false, false, false];
+  List<bool> _savedMedals4 = [false, false, false];
 
   // Аудио-плееры под каждый трек
   final AudioPlayer _menuPlayer = AudioPlayer();
   final AudioPlayer _level1Player = AudioPlayer();
   final AudioPlayer _level2Player = AudioPlayer();
   final AudioPlayer _level3Player = AudioPlayer();
+  final AudioPlayer _level4Player = AudioPlayer();
   final AudioPlayer _deathPlayer = AudioPlayer();
 
   double _volume = 50.0;
@@ -134,6 +144,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   List<Offset> _trailParticles = [];
   List<BgItem> _bgItems = [];
   List<DeathParticle> _deathParticles = [];
+  List<GameOrb> _orbs = [];       // Массив для сфер (орбов) 4-го уровня
+  double _orbSpinAngle = 0;       // Угол вращения сфер
+  bool _isGravityInverted = false; // Состояние инверсии гравитации (вверх ногами)
   List<int> _collectedThisRun = [];
   int _currentProgress = 0;
   bool _isPressing = false;
@@ -165,6 +178,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       _attempts1 = _prefs.getInt('cybics_attempts_1') ?? 0;
       _attempts2 = _prefs.getInt('cybics_attempts_2') ?? 0;
       _attempts3 = _prefs.getInt('cybics_attempts_3') ?? 0;
+      _maxProgress4 = _prefs.getInt('cybics_max_progress_4') ?? 0;
+      _attempts4 = _prefs.getInt('cybics_attempts_4') ?? 0;
+      String? m4 = _prefs.getString('cybics_medals_4');
+      if (m4 != null) _savedMedals4 = List<bool>.from(jsonDecode(m4));
       _volume = _prefs.getDouble('cybics_volume') ?? 50.0;
       _showPercent = _prefs.getBool('cybics_show_percent') ?? true;
       _showFps = _prefs.getBool('cybics_show_fps') ?? false;
@@ -186,6 +203,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     _level1Player.setVolume(vol);
     _level2Player.setVolume(vol);
     _level3Player.setVolume(vol);
+    _level4Player.setVolume(vol);
     _deathPlayer.setVolume(vol * 0.5);
   }
 
@@ -198,18 +216,21 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       await _level1Player.setReleaseMode(ReleaseMode.loop);
       await _level2Player.setReleaseMode(ReleaseMode.loop);
       await _level3Player.setReleaseMode(ReleaseMode.loop);
+      await _level4Player.setReleaseMode(ReleaseMode.loop);
 
       if (_state == GameState.gameplay) {
         await _menuPlayer.stop();
         await _stopAllLevelTracks();
 
         if (!_isPaused) {
-          if (_currentLevel == 1) {
+                    if (_currentLevel == 1) {
             await _level1Player.play(AssetSource('level1.mp3'));
           } else if (_currentLevel == 2) {
             await _level2Player.play(AssetSource('level2.mp3'));
           } else if (_currentLevel == 3) {
             await _level3Player.play(AssetSource('level3.mp3'));
+          } else if (_currentLevel == 4) {
+            await _level4Player.play(AssetSource('level4.mp3')); // Наш новый трек
           }
         }
       } else {
@@ -226,6 +247,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       await _level1Player.stop();
       await _level2Player.stop();
       await _level3Player.stop();
+      await _level4Player.stop();
     } catch (e) {
       debugPrint("Ошибка остановки треков: $e");
     }
@@ -238,11 +260,12 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       await _deathPlayer.stop();
       await _deathPlayer.play(AssetSource('death.mp3'));
 
-      // 2. Определяем, какой плеер сейчас активен
-      AudioPlayer activePlayer;
+            AudioPlayer activePlayer;
       if (_currentLevel == 1) activePlayer = _level1Player;
       else if (_currentLevel == 2) activePlayer = _level2Player;
-      else activePlayer = _level3Player;
+      else if (_currentLevel == 3) activePlayer = _level3Player;
+      else activePlayer = _level4Player; // <-- ДОБАВИТЬ СТРОКУ ДЛЯ 4 УРОВНЯ
+
 
       // 3. Слегка приглушаем его на время взрыва
       double normalVol = _volume / 100.0;
@@ -251,11 +274,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       // 4. Перематываем музыку уровня на самое начало (0 секунд)
       await activePlayer.seek(Duration.zero);
 
-      // 5. Принудительно запускаем воспроизведение трека с нуля!
+            // Принудительно запускаем воспроизведение трека с нуля!
       await activePlayer.play(
         _currentLevel == 1 ? AssetSource('level1.mp3') : 
-        (_currentLevel == 2 ? AssetSource('level2.mp3') : AssetSource('level3.mp3'))
+        (_currentLevel == 2 ? AssetSource('level2.mp3') : 
+        (_currentLevel == 3 ? AssetSource('level3.mp3') : AssetSource('level4.mp3'))) // <-- ДОБАВИТЬ LEVEL4
       );
+
 
       // 6. Через 300 миллисекунд возвращаем полную громкость
       Timer(const Duration(milliseconds: 300), () async {
@@ -466,7 +491,86 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         }
       }
     }
-  }
+        } else if (_currentLevel == 4) {
+      // ГЕНЕРАЦИЯ УРОВНЯ 4: "GRAVITY & ORBS" (Инверсия без ложных смертей на входе)
+      int seed = 4444; 
+      int invertedSeed = 8585;
+      _orbs.clear(); // Сбрасываем сферы перед генерацией карты
+      
+      double portalInX = _levelLength * 0.35;
+
+      while (nextX < _levelLength - 1000) {
+        double progressPct = (nextX / _levelLength) * 100;
+        bool isGravityZone = progressPct >= 35 && progressPct <= 70;
+
+        if (isGravityZone) {
+          // --- ЗОНА ИНВЕРСИИ С ИСПРАВЛЕННЫМ ВХОДОМ ---
+          
+          // ТОЧКА ПРИЗЕМЛЕНИЯ: Ставим первую платформу под потолком, куда автопилот точнейше примагнитит кубик
+          if (nextX < portalInX + 500) {
+            _obstacles.add(Obstacle(type: 'platform', x: portalInX, y: 130, w: 350, h: 30));
+            nextX = portalInX + 650;
+            continue;
+          }
+
+          double r = _seededRandom(invertedSeed++);
+          if (r < 0.35) {
+            // Комплекс 1: Ступенчатая лесенка вниз из 3-х платформ (для прыжков зажатием)
+            _obstacles.add(Obstacle(type: 'platform', x: nextX, y: 130, w: 180, h: 30));
+            _obstacles.add(Obstacle(type: 'platform', x: nextX + 220, y: 170, w: 180, h: 30)); 
+            _obstacles.add(Obstacle(type: 'platform', x: nextX + 440, y: 210, w: 180, h: 30)); 
+            nextX += 680;
+          } 
+          else if (r < 0.70) {
+            // Комплекс 2: Длинный островок с одним подвешенным перевернутым шипом
+            _obstacles.add(Obstacle(type: 'platform', x: nextX, y: 130, w: 320, h: 30));
+            _obstacles.add(Obstacle(type: 'spike', x: nextX + 140, y: 160)); // Перевёрнутый шип на платформе сверху
+            
+            _obstacles.add(Obstacle(type: 'platform', x: nextX + 380, y: 130, w: 200, h: 30)); 
+            nextX += 640;
+          } 
+          else {
+            // Комплекс 3: Испытание со сферой под потолком
+            _obstacles.add(Obstacle(type: 'platform', x: nextX, y: 130, w: 140, h: 30));
+            _orbs.add(GameOrb(x: nextX + 220, y: 240, collected: false)); 
+            _obstacles.add(Obstacle(type: 'platform', x: nextX + 280, y: 130, w: 200, h: 30));
+            nextX += 540;
+          }
+        } else {
+          // --- НАЗЕМНЫЕ ПРЕПЯТСТВИЯ С ОБЯЗАТЕЛЬНЫМИ СФЕРАМИ (ОРБАМИ) ---
+          double r = _seededRandom(seed++);
+          if (r < 0.35) {
+            // Спавним орб над ловушкой, чтобы её можно было пролететь
+            _orbs.add(GameOrb(x: nextX + 95, y: _floorY - 110, collected: false));
+            _obstacles.add(Obstacle(type: 'spike', x: nextX + 30, y: _floorY));
+            _obstacles.add(Obstacle(type: 'spike', x: nextX + 60, y: _floorY));
+            _obstacles.add(Obstacle(type: 'spike', x: nextX + 90, y: _floorY));
+            _obstacles.add(Obstacle(type: 'spike', x: nextX + 120, y: _floorY));
+            nextX += 480;
+          } 
+          else if (r < 0.70) {
+            // Каскад из двух сфер подряд над гигантской стеной из 9 шипов
+            _orbs.add(GameOrb(x: nextX + 50, y: _floorY - 90, collected: false));
+            _orbs.add(GameOrb(x: nextX + 200, y: _floorY - 170, collected: false));
+            for (int i = 0; i < 9; i++) {
+              _obstacles.add(Obstacle(type: 'spike', x: nextX + (i * 30), y: _floorY));
+            }
+            _obstacles.add(Obstacle(type: 'platform', x: nextX + 280, y: _floorY - 80, w: 120, h: 80));
+            nextX += 560; 
+          } 
+          else {
+            _obstacles.add(Obstacle(type: 'platform', x: nextX, y: _floorY - 50, w: 100, h: 50));
+            _orbs.add(GameOrb(x: nextX + 170, y: _floorY - 140, collected: false));
+            _obstacles.add(Obstacle(type: 'spike', x: nextX + 130, y: _floorY));
+            _obstacles.add(Obstacle(type: 'spike', x: nextX + 160, y: _floorY));
+            _obstacles.add(Obstacle(type: 'spike', x: nextX + 190, y: _floorY));
+            nextX += 480;
+          }
+        }
+      }
+      // Медалей на этом уровне пока нет, оставляем блок пустым
+    }
+  
 
 // --- ИГРОВОЙ ДВИЖОК И ФИЗИКА ---
   void _launchGameplay() {
@@ -479,6 +583,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       if (_currentLevel == 1 && _maxProgress < 100) { _attempts1++; _prefs.setInt('cybics_attempts_1', _attempts1); }
       if (_currentLevel == 2 && _maxProgress2 < 100) { _attempts2++; _prefs.setInt('cybics_attempts_2', _attempts2); }
       if (_currentLevel == 3 && _maxProgress3 < 100) { _attempts3++; _prefs.setInt('cybics_attempts_3', _attempts3); }
+      if (_currentLevel == 4 && _maxProgress4 < 100) { _attempts4++; _prefs.setInt('cybics_attempts_4', _attempts4); }
     });
 
     _startMusicSequencer();
@@ -495,8 +600,14 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       _collectedThisRun.clear();
       _showVictory = false;
       _showNewRecord = false;
+      _orbs.clear();
+      _orbSpinAngle = 0;
+      _isGravityInverted = false;
+
       
-      _player = Player()..y = _floorY - 40;
+     _player = Player()
+        ..y = _floorY - 40
+        ..isUpsideDown = false
 
       // Инициализация плавного фона (15 предметов)
       _bgItems.clear();
@@ -523,6 +634,51 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     });
   }
 
+      void _checkOrbActivation() {
+    if (!_isPlaying || _isPaused || _currentLevel != 4) return;
+
+    // Ищем сферу, до которой кубик может дотянуться
+    for (var orb in _orbs) {
+      if (!orb.collected) {
+        double distX = ((_player.x + _player.size / 2) - orb.x).abs();
+        double distY = ((_player.y + _player.size / 2) - orb.y).abs();
+        
+        // Если кубик находится в радиусе от сферы (в пределах 80 пикселей)
+        if (distX < 80 && distY < 80) {
+          setState(() {
+            orb.collected = true; // Помечаем, что сфера использована
+            
+            // Прыжок в воздухе с учетом текущей гравитации
+            if (_isGravityInverted) {
+              _player.vy = 16;  // Сильный толчок вниз (к потолку)
+            } else {
+              _player.vy = -16; // Сильный толчок вверх (к полу)
+            }
+            _player.isGrounded = false;
+          });
+          
+          _playOrbSound(); // Воспроизводим процедурный звук клика
+          break;
+        }
+      }
+    }
+  }
+
+  void _playOrbSound() async {
+    // Используем уже имеющийся у нас плеер смерти для воспроизведения короткого щелчка клика,
+    // либо вы можете запустить его через AudioContext на Android, но проще сработать через встроенный deathPlayer
+    try {
+      // Чтобы не перегружать память смартфона, мы можем воспроизвести наш короткий звук взрыва
+      // на минимальной громкости (0.1), что создаст идеальный эффект щелчка сферы!
+      await _deathPlayer.stop();
+      await _deathPlayer.setVolume((_volume / 100.0) * 0.2);
+      await _deathPlayer.play(AssetSource('death.mp3'));
+    } catch (e) {
+      debugPrint("Ошибка воспроизведения звука сферы: $e");
+    }
+  }
+
+
   void _updatePhysics() {
         // Расчет FPS в реальном времени
     _frameCount++;
@@ -540,109 +696,248 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       if (_trailParticles.length > 15) _trailParticles.removeAt(0);
 
       double progressPct = (_player.x / _levelLength) * 100;
-      _player.isShip = ((_currentLevel == 2 || _currentLevel == 3) && progressPct >= 40 && progressPct <= 75);
+            double progressPct = (_player.x / _levelLength) * 100;
 
-      if (_player.isShip) {
-        if (_isPressing) _player.vy -= 0.9; else _player.vy += 0.7;
-        _player.vy = _player.vy.clamp(-8, 8);
-        _player.y += _player.vy;
-        _player.isGrounded = false;
-        if (_player.y <= 100) { _player.y = 100; _player.vy = 0; }
-        _player.rotation = _player.vy * 0.04;
-      } else {
-        _player.vy += _player.gravity;
-        _player.y += _player.vy;
-        _player.isGrounded = false;
-      }
+      // ==========================================
+      //   ВЕТКА 1: ЛОГИКА ДЛЯ НОВОГО 4 УРОВНЯ (DART)
+      // ==========================================
+      if (_currentLevel == 4) {
+        _player.isShip = false; // Самолётик отключен
 
-      if (_player.y >= _floorY - _player.size) {
-        _player.y = _floorY - _player.size;
-        _player.vy = 0;
-        _player.isGrounded = true;
-      }
-
-      _currentProgress = (progressPct.clamp(0, 100)).floor();
-
-      // Сбор медалек
-      for (var m in _medals) {
-        if (!m.collected) {
-          double distX = ((_player.x + _player.size / 2) - m.x).abs();
-          double distY = ((_player.y + _player.size / 2) - m.y).abs();
-          if (distX < 35 && distY < 35) {
-            m.collected = true;
-            if (!_collectedThisRun.contains(m.id)) _collectedThisRun.add(m.id);
-          }
+        // Зона инверсии гравитации строго от 35% до 70%
+        if (progressPct >= 35 && progressPct <= 70) {
+          _isGravityInverted = true;
+        } else {
+          _isGravityInverted = false;
         }
-      }
 
-      // Проверка столкновений
-      for (var obs in _obstacles) {
-        if (obs.type == 'spike') {
-          if (_player.x + _player.size > obs.x + 8 && _player.x < obs.x + 22 &&
-              ((obs.y == _floorY && _player.y + _player.size > obs.y - 30 && _player.y < obs.y) ||
-               (obs.y != _floorY && _player.y < obs.y && _player.y + _player.size > obs.y - 30))) {
-            if (!_isGodMode) {
-              _gameOver();
-              return;
+        // Включаем «Магнитный Автопилот» на входе (первые 600 пикселей зоны инверсии)
+        double portalInX = _levelLength * 0.35;
+        bool isAutoFlying = _isGravityInverted && (_player.x < portalInX + 600);
+
+        // Запоминаем заземление перед расчетом кадра
+        bool wasGrounded = _player.isGrounded;
+        _player.isGrounded = false;
+
+        if (isAutoFlying) {
+          // Красивый и безопасный полет к платформе потолка
+          double targetPlatformY = 160;
+          _player.y += (targetPlatformY - _player.y) * 0.12;
+          _player.vy = 0;
+          if ((_player.y - targetPlatformY).abs() < 5) {
+            _player.y = targetPlatformY;
+            _player.isGrounded = true;
+          }
+        } else if (_isGravityInverted) {
+          // Стандартная инвертированная гравитация (летим вверх)
+          _player.vy -= 1.1;
+          if (_player.vy < -13) _player.vy = -13;
+          _player.y += _player.vy;
+
+          // Смерть в открытом небе (если сошел с платформы и улетел к потолку)
+          if (_player.y <= 30) {
+            if (!wasGrounded) {
+              if (!_isGodMode) {
+                _gameOver();
+                return;
+              }
             }
           }
-        } else if (obs.type == 'platform') {
-          if (_player.x + _player.size > obs.x + 4 && _player.x < obs.x + obs.w - 4 &&
-              _player.y + _player.size >= obs.y &&
-              _player.y + _player.size <= obs.y + 20 &&
-              _player.vy >= 0) {
-            _player.y = obs.y - _player.size;
+        } else {
+          // Обычная гравитация тянет вниз к полу
+          _player.vy += _player.gravity;
+          if (_player.vy > 15) _player.vy = 15;
+          _player.y += _player.vy;
+
+          if (_player.y >= _floorY - _player.size) {
+            _player.y = _floorY - _player.size;
             _player.vy = 0;
             _player.isGrounded = true;
-          } 
-          else if (_player.x + _player.size > obs.x &&
-                   _player.x < obs.x + obs.w &&
-                   _player.y + _player.size > obs.y + 15 &&
-                   _player.y < obs.y + obs.h) {
-            if (!_isGodMode) {
-              _gameOver();
-              return;
+          }
+        }
+
+        // Смерть при вылете за пределы экрана
+        if (!isAutoFlying && (_player.y < 0 || _player.y > _gameHeight)) {
+          if (!_isGodMode) {
+            _gameOver();
+            return;
+          }
+        }
+
+        // ПРОВЕРКА КОЛЛИЗИЙ ДЛЯ 4 УРОВНЯ
+        for (var obs in _obstacles) {
+          if (obs.type == 'spike') {
+            bool isUpsideDown = (obs.y < 200);
+            if (_player.x + _player.size > obs.x + 8 && _player.x < obs.x + 22 &&
+                ((!isUpsideDown && _player.y + _player.size > obs.y - 30 && _player.y < obs.y) ||
+                 (isUpsideDown && _player.y < obs.y && _player.y + _player.size > obs.y - 30))) {
+              if (!_isGodMode && !isAutoFlying) {
+                _gameOver();
+                return;
+              }
+            }
+          } else if (obs.type == 'platform') {
+            // Приземление на блоки сверху при нормальной гравитации
+            if (!_isGravityInverted && _player.x + _player.size > obs.x + 4 && _player.x < obs.x + obs.w - 4 &&
+                _player.y + _player.size >= obs.y && _player.y + _player.size <= obs.y + 20 && _player.vy >= 0) {
+              _player.y = obs.y - _player.size;
+              _player.vy = 0;
+              _player.isGrounded = true;
+            }
+            // Приземление под блоки снизу (на потолок) при инверсии гравитации
+            else if (_isGravityInverted && _player.x + _player.size > obs.x + 4 && _player.x < obs.x + obs.w - 4 &&
+                     _player.y <= obs.y + obs.h + 8 && _player.y >= obs.y + obs.h - 25 && _player.vy <= 0) {
+              _player.y = obs.y + obs.h;
+              _player.vy = 0;
+              _player.isGrounded = true;
+            }
+            // Удар в боковую стену блока
+            else if (!isAutoFlying && _player.x + _player.size > obs.x && _player.x < obs.x + obs.w &&
+                     _player.y + _player.size > obs.y + 12 && _player.y < obs.y + obs.h - 12) {
+              if (!_isGodMode) {
+                _gameOver();
+                return;
+              }
             }
           }
         }
-      }
 
-      if (!_player.isShip && _isPressing && _player.isGrounded) {
-        _player.vy = _player.jumpForce;
-        _player.isGrounded = false;
-      }
-
-      if (!_player.isShip) {
+        // Вращение кубика (в обратную сторону при инверсии)
         if (!_player.isGrounded) {
-          _player.rotation += 0.08;
+          _player.rotation += _isGravityInverted ? -0.08 : 0.08;
         } else {
           _player.rotation = (_player.rotation / (math.pi / 2)).round() * (math.pi / 2);
         }
+
+        // Автопрыжки от зажатия
+        if (_isPressing && _player.isGrounded && !isAutoFlying) {
+          if (_isGravityInverted) {
+            _player.vy = 12.0; // Сила прыжка вниз от потолка блоков
+          } else {
+            _player.vy = _player.jumpForce; // Обычный прыжок вверх от пола
+          }
+          _player.isGrounded = false;
+        }
+
+        _currentProgress = (progressPct.clamp(0, 100)).floor();
+
+        // Проверка прохождения уровня 4
+        if (_player.x >= _levelLength) {
+          _gameTimer?.cancel();
+          _isPlaying = false;
+          _showVictory = true;
+          _maxProgress4 = 100;
+          _prefs.setInt('cybics_max_progress_4', 100);
+          _stopAllLevelTracks();
+        }
+      } 
+      else {
+        // ==========================================
+        //   ВЕТКА 2: ОРИГИНАЛЬНАЯ ФИЗИКА ДЛЯ 1, 2, 3 УРОВНЕЙ
+        // ==========================================
+        _player.isShip = ((_currentLevel == 2 || _currentLevel == 3) && progressPct >= 40 && progressPct <= 75);
+
+        if (_player.isShip) {
+          if (_isPressing) _player.vy -= 0.9; else _player.vy += 0.7;
+          _player.vy = _player.vy.clamp(-8, 8);
+          _player.y += _player.vy;
+          _player.isGrounded = false;
+          if (_player.y <= 100) { _player.y = 100; _player.vy = 0; }
+          _player.rotation = _player.vy * 0.04;
+        } else {
+          _player.vy += _player.gravity;
+          _player.y += _player.vy;
+          _player.isGrounded = false;
+        }
+
+        if (_player.y >= _floorY - _player.size) {
+          _player.y = _floorY - _player.size;
+          _player.vy = 0;
+          _player.isGrounded = true;
+        }
+
+        _currentProgress = (progressPct.clamp(0, 100)).floor();
+
+        // Сбор медалек для уровней 1, 2, 3
+        for (var m in _medals) {
+          if (!m.collected) {
+            double distX = ((_player.x + _player.size / 2) - m.x).abs();
+            double distY = ((_player.y + _player.size / 2) - m.y).abs();
+            if (distX < 35 && distY < 35) {
+              m.collected = true;
+              if (!_collectedThisRun.contains(m.id)) _collectedThisRun.add(m.id);
+            }
+          }
+        }
+
+        // Проверка столкновений для уровней 1, 2, 3
+        for (var obs in _obstacles) {
+          if (obs.type == 'spike') {
+            if (_player.x + _player.size > obs.x + 8 && _player.x < obs.x + 22 &&
+                ((obs.y == _floorY && _player.y + _player.size > obs.y - 30 && _player.y < obs.y) ||
+                 (obs.y != _floorY && _player.y < obs.y && _player.y + _player.size > obs.y - 30))) {
+              if (!_isGodMode) {
+                _gameOver();
+                return;
+              }
+            }
+          } else if (obs.type == 'platform') {
+            if (_player.x + _player.size > obs.x + 4 && _player.x < obs.x + obs.w - 4 &&
+                _player.y + _player.size >= obs.y &&
+                _player.y + _player.size <= obs.y + 20 &&
+                _player.vy >= 0) {
+              _player.y = obs.y - _player.size;
+              _player.vy = 0;
+              _player.isGrounded = true;
+            } 
+            else if (_player.x + _player.size > obs.x &&
+                     _player.x < obs.x + obs.w &&
+                     _player.y + _player.size > obs.y + 15 &&
+                     _player.y < obs.y + obs.h) {
+              if (!_isGodMode) {
+                _gameOver();
+                return;
+              }
+            }
+          }
+        }
+
+        if (!_player.isShip && _isPressing && _player.isGrounded) {
+          _player.vy = _player.jumpForce;
+          _player.isGrounded = false;
+        }
+
+        if (!_player.isShip) {
+          if (!_player.isGrounded) {
+            _player.rotation += 0.08;
+          } else {
+            _player.rotation = (_player.rotation / (math.pi / 2)).round() * (math.pi / 2);
+          }
+        }
+
+        // Проверка финиша для уровней 1, 2, 3
+        if (_player.x >= _levelLength) {
+          _gameTimer?.cancel();
+          _isPlaying = false;
+          _showVictory = true;
+          
+          if (_currentLevel == 1) {
+            _maxProgress = 100; _prefs.setInt('cybics_max_progress', 100);
+            for (var id in _collectedThisRun) _savedMedals1[id] = true;
+            _prefs.setString('cybics_medals_1', jsonEncode(_savedMedals1));
+          } else if (_currentLevel == 2) {
+            _maxProgress2 = 100; _prefs.setInt('cybics_max_progress_2', 100);
+            for (var id in _collectedThisRun) _savedMedals2[id] = true;
+            _prefs.setString('cybics_medals_2', jsonEncode(_savedMedals2));
+          } else {
+            _maxProgress3 = 100; _prefs.setInt('cybics_max_progress_3', 100);
+            for (var id in _collectedThisRun) _savedMedals3[id] = true;
+            _prefs.setString('cybics_medals_3', jsonEncode(_savedMedals3));
+          }
+          _stopAllLevelTracks();
+        }
       }
 
-      // Достижение финиша
-      if (_player.x >= _levelLength) {
-        _gameTimer?.cancel();
-        _isPlaying = false;
-        _showVictory = true;
-        
-        if (_currentLevel == 1) {
-          _maxProgress = 100; _prefs.setInt('cybics_max_progress', 100);
-          for (var id in _collectedThisRun) _savedMedals1[id] = true;
-          _prefs.setString('cybics_medals_1', jsonEncode(_savedMedals1));
-        } else if (_currentLevel == 2) {
-          _maxProgress2 = 100; _prefs.setInt('cybics_max_progress_2', 100);
-          for (var id in _collectedThisRun) _savedMedals2[id] = true;
-          _prefs.setString('cybics_medals_2', jsonEncode(_savedMedals2));
-        } else {
-          _maxProgress3 = 100; _prefs.setInt('cybics_max_progress_3', 100);
-          for (var id in _collectedThisRun) _savedMedals3[id] = true;
-          _prefs.setString('cybics_medals_3', jsonEncode(_savedMedals3));
-        }
-        _stopAllLevelTracks();
-      }
-    });
-  }
 
     void _gameOver() {
     _gameTimer?.cancel(); // Останавливаем основной игровой цикл физики
@@ -739,6 +1034,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         if (_currentLevel == 1 && _maxProgress < 100) { _attempts1++; _prefs.setInt('cybics_attempts_1', _attempts1); }
         if (_currentLevel == 2 && _maxProgress2 < 100) { _attempts2++; _prefs.setInt('cybics_attempts_2', _attempts2); }
         if (_currentLevel == 3 && _maxProgress3 < 100) { _attempts3++; _prefs.setInt('cybics_attempts_3', _attempts3); }
+        if (_currentLevel == 4 && _maxProgress4 < 100) { _attempts4++; _prefs.setInt('cybics_attempts_4', _attempts4); }
       }
     });
   }
@@ -836,6 +1132,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             _buildLevelCard(2, 'NOT BAD', _maxProgress2, _attempts2, _savedMedals2, const Color(0xFFA855F7)),
             const SizedBox(width: 15),
             _buildLevelCard(3, 'TRY AND CRY', _maxProgress3, _attempts3, _savedMedals3, const Color(0xFFEF4444)),
+            const SizedBox(width: 15), // Отступ между 3 и 4 уровнями
+            // Добавляем 4-й уровень SPACE SHIFT с жёлтой обводкой 0xFFFACC15
+            _buildLevelCard(4, 'SPACE SHIFT', _maxProgress4, _attempts4, _savedMedals4, const Color(0xFFFACC15)),
           ],
         ),
         Padding(
@@ -959,7 +1258,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
   Widget _buildGameplay() {
     return Listener(
-      onPointerDown: (_) => setState(() { _isPressing = true; }),
+      onPointerDown: (_) {
+        setState(() {
+          // Если кнопка не была зажата ранее, активируем проверку сферы
+          if (!_isPressing) _checkOrbActivation(); 
+          _isPressing = true;
+        });
+      },
       onPointerUp: (_) => setState(() { _isPressing = false; }),
       child: Stack(
         children: [
@@ -1036,7 +1341,11 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildPauseOverlay() {
-    int currentRecord = _currentLevel == 1 ? _maxProgress : (_currentLevel == 2 ? _maxProgress2 : _maxProgress3);
+    int currentRecord = _currentLevel == 1 
+    ? _maxProgress 
+    : (_currentLevel == 2 
+    ? _maxProgress2 
+    : (_currentLevel == 3 ? _maxProgress3 : _maxProgress4));
     return Container(
       color: Colors.black.withOpacity(0.85),
       child: Center(
@@ -1223,10 +1532,20 @@ class GamePainter extends CustomPainter {
         canvas.drawCircle(Offset.zero, item.size, paint);
         canvas.drawCircle(Offset.zero, item.size * 0.4, paint);
       } 
-      else if (currentLevel == 3) {
+            else if (currentLevel == 3) {
         paint.color = const Color(0xFFEF4444).withOpacity(0.15);
         canvas.drawLine(Offset(-item.size / 2, 0), Offset(item.size / 2, 0), paint);
         canvas.drawLine(Offset(0, -item.size / 2), Offset(0, item.size / 2), paint);
+      }
+      else if (currentLevel == 4) {
+        // УРОВЕНЬ 4 (SPACE SHIFT): Технологичные неоновые треугольники / дельты
+        paint.color = const Color(0xFFFACC15).withOpacity(0.15); // Жёлтый неон
+        Path path = Path()
+          ..moveTo(0, -item.size) // Верхняя точка
+          ..lineTo(item.size, item.size) // Правый нижний угол
+          ..lineTo(-item.size, item.size) // Левый нижний угол
+          ..close();
+        canvas.drawPath(path, paint);
       }
       canvas.restore();
     }
@@ -1249,29 +1568,42 @@ class GamePainter extends CustomPainter {
     for (var obs in obstacles) {
       double renderX = obs.x - cameraX;
       if (renderX > -200 && renderX < (size.width / scale) + 200) {
-        if (obs.type == 'spike') {
-          // Угольно-чёрное тело шипа
-          paint.color = const Color(0xFF0F172A);
-          Path spikePath = Path()
-            ..moveTo(renderX, obs.y)
-            ..lineTo(renderX + 30, obs.y)
-            ..lineTo(renderX + 15, obs.y - 30)
-            ..close();
+                if (obs.type == 'spike') {
+          // Определяем, перевёрнут ли шип (если он находится под потолком, его Y меньше 200)
+          bool isSpikeUpsideDown = (obs.y < 200);
+
+          paint.color = const Color(0xFF0F172A); // Чёрное тело шипа
+          Path spikePath = Path();
+          
+          if (isSpikeUpsideDown) {
+            // Перевёрнутый шип (остриём вниз от потолка платформы)
+            spikePath.moveTo(renderX, obs.y);
+            spikePath.lineTo(renderX + 30, obs.y);
+            spikePath.lineTo(renderX + 15, obs.y + 30); // Остриё уходит вниз
+          } else {
+            // Обычный шип (остриём вверх от пола)
+            spikePath.moveTo(renderX, obs.y);
+            spikePath.lineTo(renderX + 30, obs.y);
+            spikePath.lineTo(renderX + 15, obs.y - 30); // Остриё уходит вверх
+          }
+          spikePath.close();
           canvas.drawPath(spikePath, paint);
 
-          // Светлая рамка
+          // Светлая контрастная обводка
           paint.style = PaintingStyle.stroke;
           paint.color = const Color(0xFFF1F5F9);
           paint.strokeWidth = 2.5;
           canvas.drawPath(spikePath, paint);
           paint.style = PaintingStyle.fill;
 
-          // Восклицательный знак НАД шипом с пульсацией
+          // Восклицательный знак НАД (или ПОД) шипом с пульсацией
           canvas.save();
           double time = DateTime.now().millisecondsSinceEpoch * 0.005;
           double pulse = 1.0 + math.sin(time) * 0.15;
           
-          canvas.translate(renderX + 15, obs.y - 45);
+          // Смещаем знак: выше для наземного шипа, ниже — для потолочного
+          double markOffsetY = isSpikeUpsideDown ? 45 : -45;
+          canvas.translate(renderX + 15, obs.y + markOffsetY);
           canvas.scale(pulse, pulse);
           
           TextPainter textPainter = TextPainter(
@@ -1283,7 +1615,7 @@ class GamePainter extends CustomPainter {
           )..layout();
           textPainter.paint(canvas, Offset(-textPainter.width / 2, -textPainter.height / 2));
           canvas.restore();
-        } 
+        }
         else if (obs.type == 'platform') {
           paint.color = const Color(0xFF334155);
           canvas.drawRect(Rect.fromLTWH(renderX, obs.y, obs.w, obs.h), paint);
@@ -1317,6 +1649,43 @@ class GamePainter extends CustomPainter {
         textPainter.paint(canvas, Offset(renderX - textPainter.width / 2, m.y - textPainter.height / 2));
       }
     }
+
+        // --- 5.1 ОТРИСОВКА ВРАЩАЮЩИХСЯ ЖЁЛТЫХ СФЕР (ДЛЯ 4 УРОВНЯ) ---
+    if (currentLevel == 4) {
+      for (var orb in _orbs) {
+        double renderX = orb.x - cameraX;
+        if (!orb.collected && renderX > -50 && renderX < (size.width / scale) + 50) {
+          canvas.save();
+          canvas.translate(renderX, orb.y);
+          
+          // Анимация непрерывного плавного кручения орба от времени
+          double time = DateTime.now().millisecondsSinceEpoch * 0.003;
+          double rotationAngle = time % (math.pi * 2);
+          canvas.rotate(rotationAngle);
+          
+          // Настраиваем неоновый стиль (Жёлтый цвет #FACC15)
+          paint.color = const Color(0xFFFACC15);
+          paint.style = PaintingStyle.stroke;
+          paint.strokeWidth = 3.5;
+          
+          // Рисуем внешнее кольцо сферы (радиус 22)
+          canvas.drawCircle(Offset.zero, 22, paint);
+          
+          // Рисуем крестовину внутри кольца (длина 15 в каждую сторону)
+          paint.strokeWidth = 2.5;
+          canvas.drawLine(const Offset(-15, 0), const Offset(15, 0), paint);
+          canvas.drawLine(const Offset(0, -15), const Offset(0, 15), paint);
+          
+          // Яркое белое ядро сферы в самом центре (радиус 9)
+          paint.color = Colors.white;
+          paint.style = PaintingStyle.fill;
+          canvas.drawCircle(Offset.zero, 9, paint);
+          
+          canvas.restore();
+        }
+      }
+    }
+    // --- КОНЕЦ ОТРИСОВКИ СФЕР ---
 
     // 6. Неоновый широкий прозрачный шлейф
     if (trailParticles.isNotEmpty) {
@@ -1392,6 +1761,55 @@ class GamePainter extends CustomPainter {
       drawModePortal(shipInX);
       drawModePortal(shipOutX);
     }
+
+       // --- 8.1 ЖЁЛТЫЕ ПОРТАЛЫ ИНВЕРСИИ ГРАВИТАЦИИ (ДЛЯ 4 УРОВНЯ) ---
+    if (currentLevel == 4) {
+      double gravInX = (levelLength * 0.35) - cameraX;
+      double gravOutX = (levelLength * 0.70) - cameraX;
+
+      void drawGravityPortal(double x, bool isEntering) {
+        if (x > -100 && x < (size.width / scale) + 100) {
+          canvas.save();
+
+          // 1. Мягкое градиентное свечение внутри ворот
+          final Rect portalRect = Rect.fromLTWH(x - 25, 100, 50, floorY - 100);
+          paint.shader = const LinearGradient(
+            colors: [Colors.transparent, Color(0x59EAB308), Colors.transparent],
+          ).createShader(portalRect);
+          paint.style = PaintingStyle.fill;
+          canvas.drawRect(portalRect, paint);
+          paint.shader = null;
+
+          // 2. Яркая жёлтая неоновая центральная линия портала
+          paint.style = PaintingStyle.stroke;
+          paint.color = const Color(0xFFFACC15); // Жёлтый неон
+          paint.strokeWidth = 5;
+          canvas.drawLine(Offset(x, 100), Offset(x, floorY), paint);
+          paint.style = PaintingStyle.fill;
+
+          // 3. Текстовый указатель направления гравитации над воротами
+          TextPainter textPainter = TextPainter(
+            text: TextSpan(
+              text: isEntering ? '▼ INVERT' : '▲ NORMAL',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                shadows: [Shadow(blurRadius: 4, color: Colors.black)],
+              ),
+            ),
+            textDirection: TextDirection.ltr,
+          )..layout();
+          textPainter.paint(canvas, Offset(x - textPainter.width / 2, 85 - textPainter.height / 2));
+
+          canvas.restore();
+        }
+      }
+
+      drawGravityPortal(gravInX, true);
+      drawGravityPortal(gravOutX, false);
+    }
+    // --- КОНЕЦ ЖЁЛТЫХ ПОРТАЛОВ ---
 
     // 9. Портал финиша (Зелёный)
     double portalX = levelLength - cameraX;
