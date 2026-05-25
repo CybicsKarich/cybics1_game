@@ -112,7 +112,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   final AudioPlayer _level3Player = AudioPlayer();
   final AudioPlayer _level4Player = AudioPlayer();
   final AudioPlayer _deathPlayer = AudioPlayer();
-  
+
   double _volume = 50.0;
   bool _showPercent = true;
   bool _showFps = false;
@@ -185,12 +185,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       String? m4 = _prefs.getString('cybics_medals_4');
       if (m4 != null) _savedMedals4 = List<bool>.from(jsonDecode(m4));
     });
-        
-      _soundpool.load(soundData).then((id) {
-        _orbSoundId = id;
-      });
-    });
-
     _updatePlayersVolume();
     _startMusicSequencer();
   }
@@ -277,7 +271,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     return x - x.floorToDouble();
   }
 
-    void _generateFixedLevel() {
+  void _generateFixedLevel() {
     _obstacles.clear();
     _medals.clear();
     _collectedThisRun.clear();
@@ -312,7 +306,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         double progressPct = (nextX / _levelLength) * 100;
         bool isShipZone = progressPct >= 40 && progressPct <= 71;
 
-        if (isShipZone) {
+                if (isShipZone) {
           double r = _seededRandom(seed++);
           if (r < 0.5) {
             _obstacles.add(Obstacle(type: 'platform', x: nextX, y: 0, w: 60, h: 180));
@@ -461,19 +455,19 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           }
         }
       }
-    } 
+      _medals.add(Medal(id: 0, x: _levelLength * 0.15, y: _floorY - 120));
+    }
     else if (_currentLevel == 4) {
       int seed = 4444; 
       int invertedSeed = 8585;
       _orbs.clear();
       double portalInX = _levelLength * 0.35;
 
-            while (nextX < _levelLength - 1000) {
+      while (nextX < _levelLength - 1000) {
         double progressPct = (nextX / _levelLength) * 100;
         bool isGravityZone = progressPct >= 35 && progressPct <= 70;
 
         if (isGravityZone) {
-          // --- ЗОНА ИНВЕРСИИ С ИСПРАВЛЕННЫМ ВХОДОМ ---
           if (nextX < portalInX + 500) {
             _obstacles.add(Obstacle(type: 'platform', x: portalInX, y: 130, w: 350, h: 30));
             nextX = portalInX + 650;
@@ -498,7 +492,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             _orbs.add(GameOrb(x: nextX + 220, y: 240, collected: false)); 
             _obstacles.add(Obstacle(type: 'platform', x: nextX + 280, y: 130, w: 200, h: 30));
             nextX += 540;
-          }
+                    }
         } else {
           // --- НАЗЕМНЫЕ ПРЕПЯТСТВИЯ С ОБЯЗАТЕЛЬНЫМИ СФЕРАМИ (ОРБАМИ) ---
           double r = _seededRandom(seed++);
@@ -553,7 +547,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   void _startLevel() {
     _gameTimer?.cancel();
     setState(() {
-      _isPlaying = true; 
+      _isPlaying = true;
       _cameraX = 0;
       _currentProgress = 0;
       _trailParticles.clear();
@@ -592,7 +586,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     });
   }
 
-    void _checkOrbActivation() {
+  void _checkOrbActivation() {
     if (!_isPlaying || _isPaused || _currentLevel != 4) return;
 
     for (var orb in _orbs) {
@@ -610,32 +604,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             }
             _player.isGrounded = false;
           });
-          _playOrbSound();
           break;
         }
       }
     }
   }
 
-        void _playOrbSound() {
-    // Используем встроенный в Flutter системный клик обратной связи.
-    // На Android он воспроизведет стандартный системный щелчок нажатия (наподобие клика клавиатуры),
-    // который идеально подходит для орба и 100% никогда не прервет воспроизведение музыки!
-    Feedback.forTap(context);
-  }
-
-
-
-
   void _updatePhysics() {
-    _frameCount++;
-    DateTime now = DateTime.now();
-    if (now.difference(_lastFpsTime).inSeconds >= 1) {
-      _fpsCount = _frameCount;
-      _frameCount = 0;
-      _lastFpsTime = now;
-    }
-
     setState(() {
       _player.x += 7.5;
       _cameraX = _player.x - 200;
@@ -643,8 +618,19 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       _trailParticles.add(Offset(_player.x + _player.size / 2, _player.y + _player.size / 2));
       if (_trailParticles.length > 15) _trailParticles.removeAt(0);
 
+      _frameCount++;
+      DateTime now = DateTime.now();
+      if (now.difference(_lastFpsTime).inSeconds >= 1) {
+        _fpsCount = _frameCount;
+        _frameCount = 0;
+        _lastFpsTime = now;
+      }
+
       double progressPct = (_player.x / _levelLength) * 100;
 
+      // ==========================================
+      //   ВЕТКА 1: ЛОГИКА ДЛЯ НОВОГО 4 УРОВНЯ
+      // ==========================================
       if (_currentLevel == 4) {
         _player.isShip = false;
 
@@ -742,9 +728,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
         if (_isPressing && _player.isGrounded && !isAutoFlying) {
           if (_isGravityInverted) {
-            _player.vy = 12.0; 
+            _player.vy = 12.0;
           } else {
-            _player.vy = _player.jumpForce; 
+            _player.vy = _player.jumpForce;
           }
           _player.isGrounded = false;
         }
@@ -761,6 +747,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         }
       } 
       else {
+        // ==========================================
+        //   ВЕТКА 2: ОРИГИНАЛЬНАЯ ФИЗИКА ДЛЯ 1, 2, 3 УРОВНЕЙ
+        // ==========================================
         _player.isShip = ((_currentLevel == 2 || _currentLevel == 3) && progressPct >= 40 && progressPct <= 75);
 
         if (_player.isShip) {
@@ -768,7 +757,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           _player.vy = _player.vy.clamp(-8, 8);
           _player.y += _player.vy;
           _player.isGrounded = false;
-                    if (_player.y <= 100) { _player.y = 100; _player.vy = 0; }
+          if (_player.y <= 100) { _player.y = 100; _player.vy = 0; }
           _player.rotation = _player.vy * 0.04;
         } else {
           _player.vy += _player.gravity;
@@ -784,11 +773,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
         _currentProgress = (progressPct.clamp(0, 100)).floor();
 
-        // Сбор медалек для уровней 1, 2, 3
         for (var m in _medals) {
           if (!m.collected) {
             double distX = ((_player.x + _player.size / 2) - m.x).abs();
-            double distY = ((_player.y + _player.size / 2) - m.y).abs();
+                        double distY = ((_player.y + _player.size / 2) - m.y).abs();
             if (distX < 35 && distY < 35) {
               m.collected = true;
               if (!_collectedThisRun.contains(m.id)) _collectedThisRun.add(m.id);
@@ -869,6 +857,17 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   void _gameOver() {
     _gameTimer?.cancel();
     _playDeathSound();
+    bool isNewRecord = false;
+
+    if (_currentLevel == 1 && _currentProgress > _maxProgress && _currentProgress < 100) {
+      _maxProgress = _currentProgress; _prefs.setInt('cybics_max_progress', _maxProgress); isNewRecord = true;
+    } else if (_currentLevel == 2 && _currentProgress > _maxProgress2 && _currentProgress < 100) {
+      _maxProgress2 = _currentProgress; _prefs.setInt('cybics_max_progress_2', _maxProgress2); isNewRecord = true;
+    } else if (_currentLevel == 3 && _currentProgress > _maxProgress3 && _currentProgress < 100) {
+      _maxProgress3 = _currentProgress; _prefs.setInt('cybics_max_progress_3', _maxProgress3); isNewRecord = true;
+    } else if (_currentLevel == 4 && _currentProgress > _maxProgress4 && _currentProgress < 100) {
+      _maxProgress4 = _currentProgress; _prefs.setInt('cybics_max_progress_4', _maxProgress4); isNewRecord = true;
+    }
 
     setState(() {
       _isPlaying = false;
@@ -912,23 +911,11 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       setState(() {
         _deathParticles.clear();
       });
-      _continueGameOverLogic();
+      _continueGameOverLogic(isNewRecord);
     });
   }
 
-  void _continueGameOverLogic() {
-    bool isNewRecord = false;
-
-    if (_currentLevel == 1) {
-      if (_currentProgress > _maxProgress && _currentProgress < 100) { _maxProgress = _currentProgress; _prefs.setInt('cybics_max_progress', _maxProgress); isNewRecord = true; }
-    } else if (_currentLevel == 2) {
-      if (_currentProgress > _maxProgress2 && _currentProgress < 100) { _maxProgress2 = _currentProgress; _prefs.setInt('cybics_max_progress_2', _maxProgress2); isNewRecord = true; }
-    } else if (_currentLevel == 3) {
-      if (_currentProgress > _maxProgress3 && _currentProgress < 100) { _maxProgress3 = _currentProgress; _prefs.setInt('cybics_max_progress_3', _maxProgress3); isNewRecord = true; }
-    } else if (_currentLevel == 4) {
-      if (_currentProgress > _maxProgress4 && _currentProgress < 100) { _maxProgress4 = _currentProgress; _prefs.setInt('cybics_max_progress_4', _maxProgress4); isNewRecord = true; }
-    }
-
+  void _continueGameOverLogic(bool isNewRecord) {
     if (isNewRecord) {
       setState(() { _showNewRecord = true; });
       Timer(const Duration(milliseconds: 1200), () {
@@ -953,6 +940,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     });
   }
 
+  // --- ИНТЕРФЕЙС ЭКРАНОВ (ВЕРСТКА FLUTTER) ---
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -995,7 +983,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               _titleClicks++;
               if (_titleClicks >= 10) {
                 setState(() { _isGodMode = true; });
-                _menuPlayer.play(AssetSource('god.mp3'));
+                _menuPlayer.play(AssetSource('god.mp3')); 
               }
             },
             child: ScaleTransition(
@@ -1029,7 +1017,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
 
-    Widget _buildLevelsMenu() {
+  Widget _buildLevelsMenu() {
     return Column(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -1059,7 +1047,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildLevelCard(int lvl, String name, int progress, int attempts, List<bool> medals, Color borderColor) {
+    Widget _buildLevelCard(int lvl, String name, int progress, int attempts, List<bool> medals, Color borderColor) {
     return GestureDetector(
       onTap: () {
         _currentLevel = lvl;
@@ -1297,7 +1285,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
 
-    Widget _buildVictoryOverlay() {
+  Widget _buildVictoryOverlay() {
     return Container(
       color: Colors.black.withOpacity(0.9),
       child: Center(
@@ -1321,7 +1309,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildBtn(String text, VoidCallback onPressed, {bool isSecondary = false, double minWidth = 250}) {
+    Widget _buildBtn(String text, VoidCallback onPressed, {bool isSecondary = false, double minWidth = 250}) {
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 6),
       width: minWidth,
@@ -1581,7 +1569,7 @@ class GamePainter extends CustomPainter {
       }
     }
 
-        // 6. Шлейф
+    // 6. Шлейф
     if (trailParticles.isNotEmpty) {
       canvas.save();
       for (int i = 0; i < trailParticles.length; i++) {
@@ -1600,7 +1588,7 @@ class GamePainter extends CustomPainter {
     // 7. Отрисовка кубика или самолётика
     if (isPlaying) {
       canvas.save();
-      canvas.translate(player.x - cameraX + player.size / 2, player.y + player.size / 2);
+            canvas.translate(player.x - cameraX + player.size / 2, player.y + player.size / 2);
       canvas.rotate(player.rotation);
 
       if (player.isShip) {
@@ -1759,15 +1747,12 @@ class GamePainter extends CustomPainter {
       textPainter.paint(canvas, Offset(barX + barW / 2 - textPainter.width / 2, barY + barH / 2 - textPainter.height / 2));
     }
 
-    canvas.restore();
+    canvas.restore(); // Сбрасываем глобальный масштаб
   }
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }
-
-
-
 
 
 
