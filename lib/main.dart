@@ -112,6 +112,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   final AudioPlayer _level3Player = AudioPlayer();
   final AudioPlayer _level4Player = AudioPlayer();
   final AudioPlayer _deathPlayer = AudioPlayer();
+  final AudioPlayer _orbPlayer = AudioPlayer();
 
   double _volume = 50.0;
   bool _showPercent = true;
@@ -197,6 +198,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     _level3Player.setVolume(vol);
     _level4Player.setVolume(vol);
     _deathPlayer.setVolume(vol * 0.5);
+    _orbPlayer.setVolume(vol * 0.4); // Делаем звук клика сферы умеренным
   }
 
   void _startMusicSequencer() async {
@@ -611,15 +613,17 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     }
   }
 
-  void _playOrbSound() async {
+    void _playOrbSound() async {
     try {
-      await _deathPlayer.stop();
-      await _deathPlayer.setVolume((_volume / 100.0) * 0.2);
-      await _deathPlayer.play(AssetSource('death.mp3'));
+      // Воспроизводим звук через отдельный поток _orbPlayer.
+      // Теперь он никак не влияет на фоновую музыку уровня!
+      await _orbPlayer.stop(); // Сбрасываем предыдущий щелчок, если прыгаем быстро
+      await _orbPlayer.play(AssetSource('death.mp3')); // Используем тот же короткий хлопок в качестве щелчка
     } catch (e) {
       debugPrint("Ошибка воспроизведения звука сферы: $e");
     }
   }
+
 
   void _updatePhysics() {
     _frameCount++;
@@ -1354,6 +1358,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     _level3Player.dispose();
     _level4Player.dispose();
     _deathPlayer.dispose();
+    _orbPlayer.dispose();
     super.dispose();
   }
 }
