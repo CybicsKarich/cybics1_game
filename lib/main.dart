@@ -586,6 +586,41 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     });
   }
 
+    void _checkOrbActivation() {
+    if (!_isPlaying || _isPaused || _currentLevel != 4) return;
+
+    for (var orb in _orbs) {
+      if (!orb.collected) {
+        double distX = ((_player.x + _player.size / 2) - orb.x).abs();
+        double distY = ((_player.y + _player.size / 2) - orb.y).abs();
+        
+        if (distX < 80 && distY < 80) {
+          setState(() {
+            orb.collected = true;
+            if (_isGravityInverted) {
+              _player.vy = 16;
+            } else {
+              _player.vy = -16;
+            }
+            _player.isGrounded = false;
+          });
+          _playOrbSound();
+          break;
+        }
+      }
+    }
+  }
+
+  void _playOrbSound() async {
+    try {
+      await _deathPlayer.stop();
+      await _deathPlayer.setVolume((_volume / 100.0) * 0.2);
+      await _deathPlayer.play(AssetSource('death.mp3'));
+    } catch (e) {
+      debugPrint("Ошибка воспроизведения звука сферы: $e");
+    }
+  }
+
   void _updatePhysics() {
     _frameCount++;
     DateTime now = DateTime.now();
@@ -1009,7 +1044,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           ],
         ),
         Padding(
-          padding: const EdgeInsets.bottom(20.0),
+          padding: const EdgeInsets.only(bottom: 20.0),
           child: _buildBtn('Назад', () {
             setState(() { _state = GameState.mainMenu; });
           }, isSecondary: true, minWidth: 200),
