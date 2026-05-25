@@ -1,3 +1,4 @@
+import 'package:soundpool/soundpool.class.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
@@ -112,8 +113,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   final AudioPlayer _level3Player = AudioPlayer();
   final AudioPlayer _level4Player = AudioPlayer();
   final AudioPlayer _deathPlayer = AudioPlayer();
-  final AudioPlayer _orbPlayer = AudioPlayer();
 
+  late Soundpool _soundpool; // Движок звуковых эффектов
+  int? _orbSoundId;          // Уникальный ID звука сферы в памяти
+  
   double _volume = 50.0;
   bool _showPercent = true;
   bool _showFps = false;
@@ -186,6 +189,15 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       String? m4 = _prefs.getString('cybics_medals_4');
       if (m4 != null) _savedMedals4 = List<bool>.from(jsonDecode(m4));
     });
+        // Настраиваем движок звуковых эффектов для игр
+    _soundpool = Soundpool.fromOptions(options: const SoundpoolOptions(streamType: StreamType.notification));
+    // Загружаем короткий хлопок смерти, чтобы использовать его как сочный щелчок сферы
+    rootBundle.load("assets/death.mp3").then((ByteData soundData) {
+      _soundpool.load(soundData).then((id) {
+        _orbSoundId = id;
+      });
+    });
+
     _updatePlayersVolume();
     _startMusicSequencer();
   }
@@ -613,16 +625,18 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     }
   }
 
-    void _playOrbSound() async {
+      void _playOrbSound() async {
     try {
-      // Воспроизводим звук через отдельный поток _orbPlayer.
-      // Теперь он никак не влияет на фоновую музыку уровня!
-      await _orbPlayer.stop(); // Сбрасываем предыдущий щелчок, если прыгаем быстро
-      await _orbPlayer.play(AssetSource('death.mp3')); // Используем тот же короткий хлопок в качестве щелчка
+      // Soundpool просто воспроизводит звук поверх, не создавая аудиофокуса
+      // Музыка уровня физически не сможет заметить этот щелчок и продолжит играть!
+      if (_orbSoundId != null) {
+        await _soundpool.play(_orbSoundId!);
+      }
     } catch (e) {
-      debugPrint("Ошибка воспроизведения звука сферы: $e");
+      debugPrint("Ошибка Soundpool при клике сферы: $e");
     }
   }
+
 
 
   void _updatePhysics() {
@@ -1359,6 +1373,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     _level4Player.dispose();
     _deathPlayer.dispose();
     _orbPlayer.dispose();
+    _soundpool.release();
     super.dispose();
   }
 }
