@@ -1,4 +1,4 @@
-import 'package:soundpool/soundpool.class.dart';
+import 'package:soundpool/soundpool.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
@@ -190,7 +190,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       if (m4 != null) _savedMedals4 = List<bool>.from(jsonDecode(m4));
     });
         // Настраиваем движок звуковых эффектов для игр
-    _soundpool = Soundpool.fromOptions(options: const SoundpoolOptions(streamType: StreamType.notification));
+    _soundpool = Soundpool.fromOptions(options: SoundpoolOptions(streamType: StreamType.notification));
     // Загружаем короткий хлопок смерти, чтобы использовать его как сочный щелчок сферы
     rootBundle.load("assets/death.mp3").then((ByteData soundData) {
       _soundpool.load(soundData).then((id) {
@@ -210,7 +210,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     _level3Player.setVolume(vol);
     _level4Player.setVolume(vol);
     _deathPlayer.setVolume(vol * 0.5);
-    _orbPlayer.setVolume(vol * 0.4); // Делаем звук клика сферы умеренным
   }
 
   void _startMusicSequencer() async {
@@ -1372,7 +1371,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     _level3Player.dispose();
     _level4Player.dispose();
     _deathPlayer.dispose();
-    _orbPlayer.dispose();
     _soundpool.release();
     super.dispose();
   }
