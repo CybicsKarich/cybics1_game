@@ -474,17 +474,20 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             continue;
           }
 
-          double r = _seededRandom(invertedSeed++);
+                    double r = _seededRandom(invertedSeed++);
           if (r < 0.35) {
-            _obstacles.add(Obstacle(type: 'platform', x: nextX, y: 110, w: 180, h: 30));
-            _obstacles.add(Obstacle(type: 'platform', x: nextX + 220, y: 150, w: 180, h: 30)); 
-            _obstacles.add(Obstacle(type: 'platform', x: nextX + 440, y: 190, w: 180, h: 30)); 
+            // Увеличили толщину блоков до h: 60 для исключения пролетов
+            _obstacles.add(Obstacle(type: 'platform', x: nextX, y: 80, w: 180, h: 60));
+            _obstacles.add(Obstacle(type: 'platform', x: nextX + 220, y: 120, w: 180, h: 60)); 
+            _obstacles.add(Obstacle(type: 'platform', x: nextX + 440, y: 160, w: 180, h: 60)); 
             nextX += 680;
           } 
           else if (r < 0.70) {
-            _obstacles.add(Obstacle(type: 'platform', x: nextX, y: 110, w: 320, h: 30));
-            _obstacles.add(Obstacle(type: 'spike', x: nextX + 140, y: 140)); // Сдвинут шип в инверсии
-            _obstacles.add(Obstacle(type: 'platform', x: nextX + 380, y: 110, w: 200, h: 30)); 
+            // Переделали препятствие: увеличили длину платформы до шипа, подняли ее выше (y: 80)
+            _obstacles.add(Obstacle(type: 'platform', x: nextX, y: 80, w: 350, h: 60));
+            // Ставим шип на потолочную платформу (на ее нижнюю грань y: 140, острием вниз)
+            _obstacles.add(Obstacle(type: 'spike', x: nextX + 160, y: 140)); 
+            _obstacles.add(Obstacle(type: 'platform', x: nextX + 380, y: 80, w: 220, h: 60)); 
             nextX += 640;
           } 
           else {
@@ -707,32 +710,36 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                 return;
               }
             }
-                    } else if (obs.type == 'platform') {
-            // 1. Обычная гравитация: приземление на блок сверху
-            if (!_isGravityInverted && _player.x + _player.size > obs.x + 4 && _player.x < obs.x + obs.w - 4 &&
-                _player.y + _player.size >= obs.y && _player.y + _player.size <= obs.y + 25 && _player.vy >= 0) {
-              _player.y = obs.y - _player.size;
-              _player.vy = 0;
-              _player.isGrounded = true;
-            }
-            // 2. Инвертированная гравитация: приземление на блок снизу (потолок)
-            // ИСПРАВЛЕНИЕ: расширяем коридор проверки (vy.abs() + 25), чтобы поймать куб на любой скорости прыжка
-            else if (_isGravityInverted && _player.x + _player.size > obs.x + 4 && _player.x < obs.x + obs.w - 4 &&
-                     _player.y <= obs.y + obs.h + (_player.vy.abs() + 25) && _player.y + _player.size >= obs.y && _player.vy <= 0) {
-              _player.y = obs.y + obs.h;
-              _player.vy = 0;
-              _player.isGrounded = true;
-            }
-            // 3. Боковое столкновение: врезался в стену блока торцом
-            else if (!isAutoFlying && _player.x + _player.size > obs.x + 2 && _player.x < obs.x + obs.w - 2) {
-              // Дополнительно проверяем, что мы не находимся на поверхности блока, а именно бьемся в бок
-              double playerBottom = _player.y + _player.size;
-              double playerTop = _player.y;
-              if ((!_isGravityInverted && playerBottom > obs.y + 8 && playerTop < obs.y + obs.h - 4) ||
-                  (_isGravityInverted && playerTop < obs.y + obs.h - 8 && playerBottom > obs.y + 4)) {
-                if (!_isGodMode) {
-                  _gameOver();
-                  return;
+                  } else if (obs.type == 'platform') {
+            // Создаем виртуальные хитбоксы для точного пересечения геометрических фигур
+            Rect pRect = Rect.fromLTWH(_player.x, _player.y, _player.size, _player.size);
+            Rect oRect = Rect.fromLTWH(obs.x, obs.y, obs.w, obs.h);
+
+            if (pRect.overlaps(oRect)) {
+              // Вычисляем глубину пересечения по осям X и Y, чтобы понять, откуда прилетел куб
+              double overlapX = math.min(_player.x + _player.size, obs.x + obs.w) - math.max(_player.x, obs.x);
+              double overlapY = math.min(_player.y + _player.size, obs.y + obs.h) - math.max(_player.y, obs.y);
+
+              if (overlapY < overlapX) {
+                // Столкновение по вертикали (приземление)
+                if (!_isGravityInverted && _player.vy >= 0 && _player.y + _player.size - _player.vy <= obs.y + 12) {
+                  _player.y = obs.y - _player.size;
+                  _player.vy = 0;
+                  _player.isGrounded = true;
+                } 
+                else if (_isGravityInverted && _player.vy <= 0 && _player.y - _player.vy >= obs.y + obs.h - 12) {
+                  _player.y = obs.y + obs.h;
+                  _player.vy = 0;
+                  _player.isGrounded = true;
+                }
+              } else {
+                // Столкновение по горизонтали (врезался в боковую стену блока)
+                if (!isAutoFlying && !_isGodMode) {
+                  // Проверяем, что это не легкое касание угла при прыжке
+                  if (overlapY > 6) {
+                    _gameOver();
+                    return;
+                  }
                 }
               }
             }
