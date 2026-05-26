@@ -589,7 +589,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   void _checkOrbActivation() {
     if (!_isPlaying || _isPaused || _currentLevel != 4) return;
 
-    for (var orb in _orbs) {
+        for (var orb in _orbs) {
+      // ОПТИМИЗАЦИЯ: Если сфера слишком далеко позади или впереди игрока, пропускаем её расчет
+      if (orb.x < _player.x - 100 || orb.x > _player.x + 200) continue;
+
       if (!orb.collected) {
         double distX = ((_player.x + _player.size / 2) - orb.x).abs();
         double distY = ((_player.y + _player.size / 2) - orb.y).abs();
@@ -687,6 +690,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         }
 
         for (var obs in _obstacles) {
+          // ОПТИМИЗАЦИЯ: Проверяем только объекты в радиусе видимости экрана (с запасом)
+          if (obs.x < _player.x - 150 || obs.x > _player.x + 900) continue;
           if (obs.type == 'spike') {
             bool isUpsideDown = (obs.y < 200);
             if (_player.x + _player.size > obs.x + 8 && _player.x < obs.x + 22 &&
@@ -774,6 +779,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         _currentProgress = (progressPct.clamp(0, 100)).floor();
 
         for (var m in _medals) {
+          // ОПТИМИЗАЦИЯ: Игнорируем далекие медали
+          if (m.x < _player.x - 100 || m.x > _player.x + 200) continue;
           if (!m.collected) {
             double distX = ((_player.x + _player.size / 2) - m.x).abs();
                         double distY = ((_player.y + _player.size / 2) - m.y).abs();
@@ -786,6 +793,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
         // Проверка столкновений для уровней 1, 2, 3
         for (var obs in _obstacles) {
+          // ОПТИМИЗАЦИЯ: Проверяем только те объекты, которые рядом с игроком
+          if (obs.x < _player.x - 150 || obs.x > _player.x + 900) continue;
           if (obs.type == 'spike') {
             if (_player.x + _player.size > obs.x + 8 && _player.x < obs.x + 22 &&
                 ((obs.y == _floorY && _player.y + _player.size > obs.y - 30 && _player.y < obs.y) ||
