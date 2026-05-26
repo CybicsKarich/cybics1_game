@@ -630,7 +630,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     }
   }
 
-  void _updatePhysics() {
+    void _updatePhysics() {
     setState(() {
       _player.x += 7.5;
       _cameraX = _player.x - 200;
@@ -709,6 +709,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         for (var obs in _obstacles) {
           // ОПТИМИЗАЦИЯ: Проверяем только объекты в радиусе видимости экрана (с запасом)
           if (obs.x < _player.x - 150 || obs.x > _player.x + 900) continue;
+
           if (obs.type == 'spike') {
             bool isUpsideDown = (obs.y < 200);
             if (_player.x + _player.size > obs.x + 8 && _player.x < obs.x + 22 &&
@@ -719,7 +720,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                 return;
               }
             }
-                      } else if (obs.type == 'platform') {
+          } else if (obs.type == 'platform') {
             Rect pRect = Rect.fromLTWH(_player.x, _player.y, _player.size, _player.size);
             Rect oRect = Rect.fromLTWH(obs.x, obs.y, obs.w, obs.h);
 
@@ -727,18 +728,15 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               double overlapX = math.min(_player.x + _player.size, obs.x + obs.w) - math.max(_player.x, obs.x);
               double overlapY = math.min(_player.y + _player.size, obs.y + obs.h) - math.max(_player.y, obs.y);
 
-              // ЖЕСТКАЯ ФИКСАЦИЯ: Если перекрытие по Y меньше или мы летим вдоль поверхности, это опора
+              // ЖЕСТКАЯ ФИКСАЦИЯ ОПОРЫ ПЛАТФОРМЫ
               if (overlapY <= overlapX + 2) {
                 if (!_isGravityInverted) {
-                  // Выталкиваем кубик строго НАД платформой и возвращаем ему опору
                   if (_player.y + _player.size / 2 < obs.y + obs.h / 2) {
                     _player.y = obs.y - _player.size;
-                    // Обнуляем скорость падения, только если мы не совершаем прыжок в этот самый момент
                     if (_player.vy > 0) _player.vy = 0;
                     _player.isGrounded = true;
                   }
                 } else {
-                  // В инверсии прижимаем кубик строго К НИЖНЕЙ ГРАНИ потолка
                   if (_player.y + _player.size / 2 > obs.y + obs.h / 2) {
                     _player.y = obs.y + obs.h;
                     if (_player.vy < 0) _player.vy = 0;
@@ -746,7 +744,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                   }
                 }
               } else {
-                // БОКОВОЙ ХИТБОКС (Врезался в стену блока)
+                // БОКОВОЙ ХИТБОКС (Смерть об стену)
                 if (!isAutoFlying && !_isGodMode) {
                   if (overlapY > 8) {
                     _gameOver();
@@ -755,7 +753,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                 }
               }
             }
-          }
           }
         }
 
@@ -815,9 +812,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         for (var m in _medals) {
           // ОПТИМИЗАЦИЯ: Игнорируем далекие медали
           if (m.x < _player.x - 100 || m.x > _player.x + 200) continue;
+
           if (!m.collected) {
             double distX = ((_player.x + _player.size / 2) - m.x).abs();
-                        double distY = ((_player.y + _player.size / 2) - m.y).abs();
+            double distY = ((_player.y + _player.size / 2) - m.y).abs();
             if (distX < 35 && distY < 35) {
               m.collected = true;
               if (!_collectedThisRun.contains(m.id)) _collectedThisRun.add(m.id);
@@ -825,10 +823,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           }
         }
 
-        // Проверка столкновений для уровней 1, 2, 3
         for (var obs in _obstacles) {
-          // ОПТИМИЗАЦИЯ: Проверяем только те объекты, которые рядом с игроком
+          // ОПТИМИЗАЦИЯ: Проверяем только объекты рядом с игроком
           if (obs.x < _player.x - 150 || obs.x > _player.x + 900) continue;
+
           if (obs.type == 'spike') {
             if (_player.x + _player.size > obs.x + 8 && _player.x < obs.x + 22 &&
                 ((obs.y == _floorY && _player.y + _player.size > obs.y - 30 && _player.y < obs.y) ||
@@ -838,7 +836,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                 return;
               }
             }
-                    } else if (obs.type == 'platform') {
+          } else if (obs.type == 'platform') {
             Rect pRect = Rect.fromLTWH(_player.x, _player.y, _player.size, _player.size);
             Rect oRect = Rect.fromLTWH(obs.x, obs.y, obs.w, obs.h);
 
@@ -846,15 +844,14 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               double overlapX = math.min(_player.x + _player.size, obs.x + obs.w) - math.max(_player.x, obs.x);
               double overlapY = math.min(_player.y + _player.size, obs.y + obs.h) - math.max(_player.y, obs.y);
 
+              // ХИТБОКСЫ ПЛАТФОРМЫ ВСЕГДА ОСТАЮТСЯ АКТИВНЫМИ ПРИ ПРЫЖКЕ
               if (overlapY <= overlapX + 2) {
-                // Приземление и скольжение по платформе сверху
                 if (_player.y + _player.size / 2 < obs.y + obs.h / 2) {
                   _player.y = obs.y - _player.size;
                   if (_player.vy > 0) _player.vy = 0;
                   _player.isGrounded = true;
                 }
               } else {
-                // Врезался в боковую часть блока на полной скорости
                 if (!_isGodMode) {
                   if (overlapY > 8) {
                     _gameOver();
@@ -879,7 +876,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           }
         }
 
-        // Проверка финиша для уровней 1, 2, 3
         if (_player.x >= _levelLength) {
           _gameTimer?.cancel();
           _isPlaying = false;
