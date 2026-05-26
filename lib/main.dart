@@ -493,16 +493,18 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             _obstacles.add(Obstacle(type: 'platform', x: nextX + 280, y: 130, w: 200, h: 30));
             nextX += 540;
                     }
-        } else {
+                } else {
           // --- НАЗЕМНЫЕ ПРЕПЯТСТВИЯ С ОБЯЗАТЕЛЬНЫМИ СФЕРАМИ (ОРБАМИ) ---
           double r = _seededRandom(seed++);
           if (r < 0.35) {
-            _orbs.add(GameOrb(x: nextX + 95, y: _floorY - 110, collected: false));
+            // ИЗМЕНЕНИЕ: Теперь 5 шипов в ряд, сферу сдвигаем чуть дальше вперед (на x: +110)
+            _orbs.add(GameOrb(x: nextX + 110, y: _floorY - 110, collected: false));
             _obstacles.add(Obstacle(type: 'spike', x: nextX + 30, y: _floorY));
             _obstacles.add(Obstacle(type: 'spike', x: nextX + 60, y: _floorY));
             _obstacles.add(Obstacle(type: 'spike', x: nextX + 90, y: _floorY));
             _obstacles.add(Obstacle(type: 'spike', x: nextX + 120, y: _floorY));
-            nextX += 480;
+            _obstacles.add(Obstacle(type: 'spike', x: nextX + 150, y: _floorY)); // 5-й шип
+            nextX += 510;
           } 
           else if (r < 0.70) {
             _orbs.add(GameOrb(x: nextX + 50, y: _floorY - 90, collected: false));
@@ -514,12 +516,15 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             nextX += 560; 
           } 
           else {
+            // ИЗМЕНЕНИЕ: Платформа, за ней 5 шипов вместо 3, сферу центрируем (на x: +200)
             _obstacles.add(Obstacle(type: 'platform', x: nextX, y: _floorY - 50, w: 100, h: 50));
-            _orbs.add(GameOrb(x: nextX + 170, y: _floorY - 140, collected: false));
+            _orbs.add(GameOrb(x: nextX + 200, y: _floorY - 140, collected: false));
             _obstacles.add(Obstacle(type: 'spike', x: nextX + 130, y: _floorY));
             _obstacles.add(Obstacle(type: 'spike', x: nextX + 160, y: _floorY));
             _obstacles.add(Obstacle(type: 'spike', x: nextX + 190, y: _floorY));
-            nextX += 480;
+            _obstacles.add(Obstacle(type: 'spike', x: nextX + 220, y: _floorY)); // 4-й шип
+            _obstacles.add(Obstacle(type: 'spike', x: nextX + 250, y: _floorY)); // 5-й шип
+            nextX += 540;
           }
         }
       }
@@ -709,8 +714,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               _player.vy = 0;
               _player.isGrounded = true;
             }
-            else if (_isGravityInverted && _player.x + _player.size > obs.x + 4 && _player.x < obs.x + obs.w - 4 &&
-                     _player.y <= obs.y + obs.h + 8 && _player.y >= obs.y + obs.h - 25 && _player.vy <= 0) {
+                        else if (_isGravityInverted && _player.x + _player.size > obs.x + 4 && _player.x < obs.x + obs.w - 4 &&
+                     _player.y <= obs.y + obs.h + 20 && _player.y >= obs.y + obs.h - 25 && _player.vy <= 0) {
               _player.y = obs.y + obs.h;
               _player.vy = 0;
               _player.isGrounded = true;
