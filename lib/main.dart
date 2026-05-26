@@ -463,7 +463,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       _orbs.clear();
       double portalInX = _levelLength * 0.35;
 
-      while (nextX < _levelLength - 1000) {
+            while (nextX < _levelLength - 1000) {
         double progressPct = (nextX / _levelLength) * 100;
         bool isGravityZone = progressPct >= 35 && progressPct <= 70;
 
@@ -474,30 +474,22 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             continue;
           }
 
-                    // МЫ УДАЛИЛИ ПРОБЛЕМНОЕ ПРЕПЯТСТВИЕ С ШИПОМ
-          // Теперь здесь генерируются только честные каскадные платформы, где невозможно застрять
+          // Наш чистый генератор каскадных платформ без шипов
           _obstacles.add(Obstacle(type: 'platform', x: nextX, y: 80, w: 180, h: 60));
           _obstacles.add(Obstacle(type: 'platform', x: nextX + 240, y: 120, w: 180, h: 60)); 
           _obstacles.add(Obstacle(type: 'platform', x: nextX + 480, y: 160, w: 180, h: 60)); 
           nextX += 720;
- 
+
         } else {
-            _obstacles.add(Obstacle(type: 'platform', x: nextX, y: 130, w: 140, h: 30));
-            _orbs.add(GameOrb(x: nextX + 220, y: 240, collected: false)); 
-            _obstacles.add(Obstacle(type: 'platform', x: nextX + 280, y: 130, w: 200, h: 30));
-            nextX += 540;
-                    }
-                } else {
           // --- НАЗЕМНЫЕ ПРЕПЯТСТВИЯ С ОБЯЗАТЕЛЬНЫМИ СФЕРАМИ (ОРБАМИ) ---
           double r = _seededRandom(seed++);
           if (r < 0.35) {
-            // ИЗМЕНЕНИЕ: Теперь 5 шипов в ряд, сферу сдвигаем чуть дальше вперед (на x: +110)
             _orbs.add(GameOrb(x: nextX + 110, y: _floorY - 110, collected: false));
             _obstacles.add(Obstacle(type: 'spike', x: nextX + 30, y: _floorY));
             _obstacles.add(Obstacle(type: 'spike', x: nextX + 60, y: _floorY));
             _obstacles.add(Obstacle(type: 'spike', x: nextX + 90, y: _floorY));
             _obstacles.add(Obstacle(type: 'spike', x: nextX + 120, y: _floorY));
-            _obstacles.add(Obstacle(type: 'spike', x: nextX + 150, y: _floorY)); // 5-й шип
+            _obstacles.add(Obstacle(type: 'spike', x: nextX + 150, y: _floorY)); 
             nextX += 510;
           } 
           else if (r < 0.70) {
@@ -510,17 +502,17 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             nextX += 560; 
           } 
           else {
-            // ИЗМЕНЕНИЕ: Платформа, за ней 5 шипов вместо 3, сферу центрируем (на x: +200)
             _obstacles.add(Obstacle(type: 'platform', x: nextX, y: _floorY - 50, w: 100, h: 50));
             _orbs.add(GameOrb(x: nextX + 200, y: _floorY - 140, collected: false));
             _obstacles.add(Obstacle(type: 'spike', x: nextX + 130, y: _floorY));
             _obstacles.add(Obstacle(type: 'spike', x: nextX + 160, y: _floorY));
             _obstacles.add(Obstacle(type: 'spike', x: nextX + 190, y: _floorY));
-            _obstacles.add(Obstacle(type: 'spike', x: nextX + 220, y: _floorY)); // 4-й шип
-            _obstacles.add(Obstacle(type: 'spike', x: nextX + 250, y: _floorY)); // 5-й шип
+            _obstacles.add(Obstacle(type: 'spike', x: nextX + 220, y: _floorY)); 
+            _obstacles.add(Obstacle(type: 'spike', x: nextX + 250, y: _floorY)); 
             nextX += 540;
           }
         }
+      }
       }
     }
   
