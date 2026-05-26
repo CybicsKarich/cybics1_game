@@ -523,7 +523,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         }
       }
     }
-  }
+  
 
   // --- ИГРОВОЙ ДВИЖОК И ФИЗИКА ---
   void _launchGameplay() {
