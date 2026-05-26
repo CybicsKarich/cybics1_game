@@ -474,11 +474,39 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             continue;
           }
 
-          // Наш чистый генератор каскадных платформ без шипов
-          _obstacles.add(Obstacle(type: 'platform', x: nextX, y: 80, w: 180, h: 60));
-          _obstacles.add(Obstacle(type: 'platform', x: nextX + 240, y: 120, w: 180, h: 60)); 
-          _obstacles.add(Obstacle(type: 'platform', x: nextX + 480, y: 160, w: 180, h: 60)); 
-          nextX += 720;
+                    // Используем сид для честного псевдорандома внутри инверсии
+          double rMode = _seededRandom(invertedSeed++);
+
+          if (rMode < 0.33) {
+            // ЛОВУШКА 1: Твои каскадные платформы (для передышки)
+            _obstacles.add(Obstacle(type: 'platform', x: nextX, y: 80, w: 180, h: 60));
+            _obstacles.add(Obstacle(type: 'platform', x: nextX + 240, y: 120, w: 180, h: 60)); 
+            _obstacles.add(Obstacle(type: 'platform', x: nextX + 480, y: 160, w: 180, h: 60)); 
+            nextX += 720;
+          } 
+          else if (rMode < 0.66) {
+            // ЛОВУШКА 2: 4 шипа на платформе в инверсии
+            // Ставим платформу на уровне y: 100, а шипы на её нижнюю грань (y: 160) острием вниз
+            _obstacles.add(Obstacle(type: 'platform', x: nextX, y: 100, w: 300, h: 60));
+            _obstacles.add(Obstacle(type: 'spike', x: nextX + 60, y: 160));
+            _obstacles.add(Obstacle(type: 'spike', x: nextX + 110, y: 160));
+            _obstacles.add(Obstacle(type: 'spike', x: nextX + 160, y: 160));
+            _obstacles.add(Obstacle(type: 'spike', x: nextX + 210, y: 160));
+            nextX += 500;
+          } 
+          else {
+            // ЛОВУШКА 3: Две платформы с большим расстоянием и парящей сферой между ними
+            // Первая платформа
+            _obstacles.add(Obstacle(type: 'platform', x: nextX, y: 100, w: 150, h: 60));
+            
+            // Парящая сфера ровно посредине пропасти (на X: +265, по высоте Y: 220 ближе к центру)
+            _orbs.add(GameOrb(x: nextX + 265, y: 220, collected: false));
+            
+            // Вторая платформа после пропасти в 230 пикселей
+            _obstacles.add(Obstacle(type: 'platform', x: nextX + 380, y: 100, w: 150, h: 60));
+            nextX += 650;
+          }
+
 
         } else {
           // --- НАЗЕМНЫЕ ПРЕПЯТСТВИЯ С ОБЯЗАТЕЛЬНЫМИ СФЕРАМИ (ОРБАМИ) ---
@@ -1552,7 +1580,7 @@ class GamePainter extends CustomPainter {
       }
     }
 
-    // 5.1 Сферы (Орбы) 4 уровня
+        // 5.1 Сферы (Орбы) 4 уровня
     if (currentLevel == 4) {
       for (var orb in orbs) {
         double renderX = orb.x - cameraX;
@@ -1581,6 +1609,7 @@ class GamePainter extends CustomPainter {
         }
       }
     }
+
 
     // 6. Шлейф
     if (trailParticles.isNotEmpty) {
