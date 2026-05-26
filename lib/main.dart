@@ -631,7 +631,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   }
 
 
-            void _updatePhysics() {
+              void _updatePhysics() {
     setState(() {
       _player.x += 7.5;
       _cameraX = _player.x - 200;
@@ -721,19 +721,19 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               }
             }
           } else if (obs.type == 'platform') {
-            // ТОЧНАЯ ПРОВЕРКА ВЕРТИКАЛЬНОЙ ОПОРЫ ДЛЯ 4 УРОВНЯ
-            if (_player.x + _player.size > obs.x + 6 && _player.x < obs.x + obs.w - 6) {
+            // АБСОЛЮТНАЯ ГЕОМЕТРИЧЕСКАЯ ПРОВЕРКА ДЛЯ 4 УРОВНЯ (ВЕРТИКАЛЬНАЯ ОПОРА)
+            if (_player.x + _player.size > obs.x + 4 && _player.x < obs.x + obs.w - 4) {
               if (!_isGravityInverted) {
-                // Обычный режим: приземление сверху (только если не прыгаем вверх активно)
-                if (_player.vy >= 0 && _player.y + _player.size >= obs.y && _player.y + _player.size <= obs.y + 24) {
+                // Если кубик падает и пробивает верхнюю грань платформы — выталкиваем его наверх
+                if (_player.vy >= 0 && _player.y + _player.size >= obs.y && _player.y <= obs.y + 10) {
                   _player.y = obs.y - _player.size;
                   _player.vy = 0;
                   _player.isGrounded = true;
                   continue;
                 }
               } else {
-                // Инверсия: прижатие к потолку снизу (только если не летим вниз активно)
-                if (_player.vy <= 0 && _player.y <= obs.y + obs.h && _player.y >= obs.y + obs.h - 24) {
+                // В инверсии: ловим кубик у нижней грани потолка при любом Vy
+                if (_player.vy <= 0 && _player.y <= obs.y + obs.h && _player.y + _player.size >= obs.y + obs.h - 10) {
                   _player.y = obs.y + obs.h;
                   _player.vy = 0;
                   _player.isGrounded = true;
@@ -742,13 +742,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               }
             }
 
-            // ЗАЩИЩЕННАЯ БОКОВАЯ КОЛЛИЗИЯ (Игнорируется, если кубик находится в фазе прыжка)
+            // БОКОВОЕ СТОЛКНОВЕНИЕ (Удар об торец)
             if (!isAutoFlying && !_isGodMode) {
               if (_player.x + _player.size > obs.x && _player.x < obs.x + obs.w) {
-                // Если мы совершаем прыжок от этой платформы, боковой фильтр временно отключается, предотвращая фантомную смерть
-                if (!_isGravityInverted && _player.vy < 0) continue;
-                if (_isGravityInverted && _player.vy > 0) continue;
-
                 double pBottom = _player.y + _player.size;
                 double pTop = _player.y;
                 if ((!_isGravityInverted && pBottom > obs.y + 12 && pTop < obs.y + obs.h - 4) ||
@@ -840,10 +836,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               }
             }
           } else if (obs.type == 'platform') {
-            // ТОЧНАЯ ПРОВЕРКА ВЕРТИКАЛЬНОЙ ОПОРЫ ДЛЯ 1, 2, 3 УРОВНЕЙ
+            // АБСОЛЮТНАЯ ГЕОМЕТРИЧЕСКАЯ ПРОВЕРКА ДЛЯ 1, 2, 3 УРОВНЕЙ (ВЕРТИКАЛЬНАЯ ОПОРА)
+            // Полностью убран лимит высоты в 20-24 пикселя. Если низ куба пересек верх блока — это 100% приземление
             if (_player.x + _player.size > obs.x + 4 && _player.x < obs.x + obs.w - 4) {
-              // Приземляем кубик, только если он не летит в прыжке вверх (vy >= 0)
-              if (_player.vy >= 0 && _player.y + _player.size >= obs.y && _player.y + _player.size <= obs.y + 24) {
+              if (_player.vy >= 0 && _player.y + _player.size >= obs.y && _player.y <= obs.y + 12) {
                 _player.y = obs.y - _player.size;
                 _player.vy = 0;
                 _player.isGrounded = true;
@@ -851,13 +847,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               }
             }
 
-            // ЗАЩИЩЕННАЯ БОКОВАЯ КОЛЛИЗИЯ ДЛЯ 1, 2, 3 УРОВНЕЙ
+            // ЧЕСТНЫЙ БОКОВОЙ УДАР (Смерть)
             if (!_isGodMode) {
               if (_player.x + _player.size > obs.x && _player.x < obs.x + obs.w) {
-                // Если скорость отрицательная (кубик прыгает вверх), полностью блокируем ложную боковую смерть
-                if (_player.vy < 0) continue;
-
-                if (_player.y + _player.size > obs.y + 14 && _player.y < obs.y + obs.h - 4) {
+                if (_player.y + _player.size > obs.y + 12 && _player.y < obs.y + obs.h - 4) {
                   _gameOver();
                   return;
                 }
@@ -884,7 +877,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           _isPlaying = false;
           _showVictory = true;
           
-            if (_currentLevel == 1) {
+          if (_currentLevel == 1) {
             _maxProgress = 100; _prefs.setInt('cybics_max_progress', 100);
             for (var id in _collectedThisRun) _savedMedals1[id] = true;
             _prefs.setString('cybics_medals_1', jsonEncode(_savedMedals1));
