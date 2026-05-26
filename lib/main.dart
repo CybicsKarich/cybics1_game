@@ -719,40 +719,43 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                 return;
               }
             }
-                  } else if (obs.type == 'platform') {
-            // Создаем виртуальные хитбоксы для точного пересечения геометрических фигур
+                      } else if (obs.type == 'platform') {
             Rect pRect = Rect.fromLTWH(_player.x, _player.y, _player.size, _player.size);
             Rect oRect = Rect.fromLTWH(obs.x, obs.y, obs.w, obs.h);
 
             if (pRect.overlaps(oRect)) {
-              // Вычисляем глубину пересечения по осям X и Y, чтобы понять, откуда прилетел куб
               double overlapX = math.min(_player.x + _player.size, obs.x + obs.w) - math.max(_player.x, obs.x);
               double overlapY = math.min(_player.y + _player.size, obs.y + obs.h) - math.max(_player.y, obs.y);
 
-                            if (overlapY < overlapX) {
-                // ВЕРТИКАЛЬНОЕ КАСАНИЕ (Нахождение на платформе)
-                // Убрали жесткие проверки направления скорости _player.vy, фиксируем куб по факту пересечения граней
-                if (!_isGravityInverted && (_player.y + _player.size) <= obs.y + 14) {
-                  _player.y = obs.y - _player.size;
-                  _player.vy = 0;
-                  _player.isGrounded = true;
-                } 
-                else if (_isGravityInverted && _player.y >= (obs.y + obs.h - 14)) {
-                  _player.y = obs.y + obs.h;
-                  _player.vy = 0;
-                  _player.isGrounded = true;
+              // ЖЕСТКАЯ ФИКСАЦИЯ: Если перекрытие по Y меньше или мы летим вдоль поверхности, это опора
+              if (overlapY <= overlapX + 2) {
+                if (!_isGravityInverted) {
+                  // Выталкиваем кубик строго НАД платформой и возвращаем ему опору
+                  if (_player.y + _player.size / 2 < obs.y + obs.h / 2) {
+                    _player.y = obs.y - _player.size;
+                    // Обнуляем скорость падения, только если мы не совершаем прыжок в этот самый момент
+                    if (_player.vy > 0) _player.vy = 0;
+                    _player.isGrounded = true;
+                  }
+                } else {
+                  // В инверсии прижимаем кубик строго К НИЖНЕЙ ГРАНИ потолка
+                  if (_player.y + _player.size / 2 > obs.y + obs.h / 2) {
+                    _player.y = obs.y + obs.h;
+                    if (_player.vy < 0) _player.vy = 0;
+                    _player.isGrounded = true;
+                  }
                 }
               } else {
-                // Столкновение по горизонтали (врезался в боковую стену блока)
+                // БОКОВОЙ ХИТБОКС (Врезался в стену блока)
                 if (!isAutoFlying && !_isGodMode) {
-                  // Проверяем, что это не легкое касание угла при прыжке
-                  if (overlapY > 6) {
+                  if (overlapY > 8) {
                     _gameOver();
                     return;
                   }
                 }
               }
             }
+          }
           }
         }
 
@@ -835,22 +838,29 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                 return;
               }
             }
-          } else if (obs.type == 'platform') {
-            if (_player.x + _player.size > obs.x + 4 && _player.x < obs.x + obs.w - 4 &&
-                _player.y + _player.size >= obs.y &&
-                _player.y + _player.size <= obs.y + 20 &&
-                _player.vy >= 0) {
-              _player.y = obs.y - _player.size;
-              _player.vy = 0;
-              _player.isGrounded = true;
-            } 
-            else if (_player.x + _player.size > obs.x &&
-                     _player.x < obs.x + obs.w &&
-                     _player.y + _player.size > obs.y + 15 &&
-                     _player.y < obs.y + obs.h) {
-              if (!_isGodMode) {
-                _gameOver();
-                return;
+                    } else if (obs.type == 'platform') {
+            Rect pRect = Rect.fromLTWH(_player.x, _player.y, _player.size, _player.size);
+            Rect oRect = Rect.fromLTWH(obs.x, obs.y, obs.w, obs.h);
+
+            if (pRect.overlaps(oRect)) {
+              double overlapX = math.min(_player.x + _player.size, obs.x + obs.w) - math.max(_player.x, obs.x);
+              double overlapY = math.min(_player.y + _player.size, obs.y + obs.h) - math.max(_player.y, obs.y);
+
+              if (overlapY <= overlapX + 2) {
+                // Приземление и скольжение по платформе сверху
+                if (_player.y + _player.size / 2 < obs.y + obs.h / 2) {
+                  _player.y = obs.y - _player.size;
+                  if (_player.vy > 0) _player.vy = 0;
+                  _player.isGrounded = true;
+                }
+              } else {
+                // Врезался в боковую часть блока на полной скорости
+                if (!_isGodMode) {
+                  if (overlapY > 8) {
+                    _gameOver();
+                    return;
+                  }
+                }
               }
             }
           }
