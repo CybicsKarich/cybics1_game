@@ -474,23 +474,14 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             continue;
           }
 
-                    double r = _seededRandom(invertedSeed++);
-          if (r < 0.35) {
-            // Увеличили толщину блоков до h: 60 для исключения пролетов
-            _obstacles.add(Obstacle(type: 'platform', x: nextX, y: 80, w: 180, h: 60));
-            _obstacles.add(Obstacle(type: 'platform', x: nextX + 220, y: 120, w: 180, h: 60)); 
-            _obstacles.add(Obstacle(type: 'platform', x: nextX + 440, y: 160, w: 180, h: 60)); 
-            nextX += 680;
-          } 
-          else if (r < 0.70) {
-            // Переделали препятствие: увеличили длину платформы до шипа, подняли ее выше (y: 80)
-            _obstacles.add(Obstacle(type: 'platform', x: nextX, y: 80, w: 350, h: 60));
-            // Ставим шип на потолочную платформу (на ее нижнюю грань y: 140, острием вниз)
-            _obstacles.add(Obstacle(type: 'spike', x: nextX + 160, y: 140)); 
-            _obstacles.add(Obstacle(type: 'platform', x: nextX + 380, y: 80, w: 220, h: 60)); 
-            nextX += 640;
-          } 
-          else {
+                    // МЫ УДАЛИЛИ ПРОБЛЕМНОЕ ПРЕПЯТСТВИЕ С ШИПОМ
+          // Теперь здесь генерируются только честные каскадные платформы, где невозможно застрять
+          _obstacles.add(Obstacle(type: 'platform', x: nextX, y: 80, w: 180, h: 60));
+          _obstacles.add(Obstacle(type: 'platform', x: nextX + 240, y: 120, w: 180, h: 60)); 
+          _obstacles.add(Obstacle(type: 'platform', x: nextX + 480, y: 160, w: 180, h: 60)); 
+          nextX += 720;
+ 
+        } else {
             _obstacles.add(Obstacle(type: 'platform', x: nextX, y: 130, w: 140, h: 30));
             _orbs.add(GameOrb(x: nextX + 220, y: 240, collected: false)); 
             _obstacles.add(Obstacle(type: 'platform', x: nextX + 280, y: 130, w: 200, h: 30));
