@@ -476,15 +476,15 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
           double r = _seededRandom(invertedSeed++);
           if (r < 0.35) {
-            _obstacles.add(Obstacle(type: 'platform', x: nextX, y: 130, w: 180, h: 30));
-            _obstacles.add(Obstacle(type: 'platform', x: nextX + 220, y: 170, w: 180, h: 30)); 
-            _obstacles.add(Obstacle(type: 'platform', x: nextX + 440, y: 210, w: 180, h: 30)); 
+            _obstacles.add(Obstacle(type: 'platform', x: nextX, y: 110, w: 180, h: 30));
+            _obstacles.add(Obstacle(type: 'platform', x: nextX + 220, y: 150, w: 180, h: 30)); 
+            _obstacles.add(Obstacle(type: 'platform', x: nextX + 440, y: 190, w: 180, h: 30)); 
             nextX += 680;
           } 
           else if (r < 0.70) {
-            _obstacles.add(Obstacle(type: 'platform', x: nextX, y: 130, w: 320, h: 30));
-            _obstacles.add(Obstacle(type: 'spike', x: nextX + 140, y: 160)); 
-            _obstacles.add(Obstacle(type: 'platform', x: nextX + 380, y: 130, w: 200, h: 30)); 
+            _obstacles.add(Obstacle(type: 'platform', x: nextX, y: 110, w: 320, h: 30));
+            _obstacles.add(Obstacle(type: 'spike', x: nextX + 140, y: 140)); // Сдвинут шип в инверсии
+            _obstacles.add(Obstacle(type: 'platform', x: nextX + 380, y: 110, w: 200, h: 30)); 
             nextX += 640;
           } 
           else {
@@ -707,24 +707,33 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                 return;
               }
             }
-          } else if (obs.type == 'platform') {
+                    } else if (obs.type == 'platform') {
+            // 1. Обычная гравитация: приземление на блок сверху
             if (!_isGravityInverted && _player.x + _player.size > obs.x + 4 && _player.x < obs.x + obs.w - 4 &&
-                _player.y + _player.size >= obs.y && _player.y + _player.size <= obs.y + 20 && _player.vy >= 0) {
+                _player.y + _player.size >= obs.y && _player.y + _player.size <= obs.y + 25 && _player.vy >= 0) {
               _player.y = obs.y - _player.size;
               _player.vy = 0;
               _player.isGrounded = true;
             }
-                        else if (_isGravityInverted && _player.x + _player.size > obs.x + 4 && _player.x < obs.x + obs.w - 4 &&
-                     _player.y <= obs.y + obs.h + 20 && _player.y >= obs.y + obs.h - 25 && _player.vy <= 0) {
+            // 2. Инвертированная гравитация: приземление на блок снизу (потолок)
+            // ИСПРАВЛЕНИЕ: расширяем коридор проверки (vy.abs() + 25), чтобы поймать куб на любой скорости прыжка
+            else if (_isGravityInverted && _player.x + _player.size > obs.x + 4 && _player.x < obs.x + obs.w - 4 &&
+                     _player.y <= obs.y + obs.h + (_player.vy.abs() + 25) && _player.y + _player.size >= obs.y && _player.vy <= 0) {
               _player.y = obs.y + obs.h;
               _player.vy = 0;
               _player.isGrounded = true;
             }
-            else if (!isAutoFlying && _player.x + _player.size > obs.x && _player.x < obs.x + obs.w &&
-                     _player.y + _player.size > obs.y + 12 && _player.y < obs.y + obs.h - 12) {
-              if (!_isGodMode) {
-                _gameOver();
-                return;
+            // 3. Боковое столкновение: врезался в стену блока торцом
+            else if (!isAutoFlying && _player.x + _player.size > obs.x + 2 && _player.x < obs.x + obs.w - 2) {
+              // Дополнительно проверяем, что мы не находимся на поверхности блока, а именно бьемся в бок
+              double playerBottom = _player.y + _player.size;
+              double playerTop = _player.y;
+              if ((!_isGravityInverted && playerBottom > obs.y + 8 && playerTop < obs.y + obs.h - 4) ||
+                  (_isGravityInverted && playerTop < obs.y + obs.h - 8 && playerBottom > obs.y + 4)) {
+                if (!_isGodMode) {
+                  _gameOver();
+                  return;
+                }
               }
             }
           }
