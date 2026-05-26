@@ -425,7 +425,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             double platform6X = nextX + (5 * 180) + 40;
             _obstacles.add(Obstacle(type: 'platform', x: platform6X, y: currentY - 50, w: 120, h: 50));
             _obstacles.add(Obstacle(type: 'spike', x: platform6X + 90, y: currentY - 50));
-            _medals.add(Medal(id: 0, x: nextX + (2 * 180) - 10, y: _floorY - 30));
             nextX += (6 * 180) + 40 + 350;
             spawnedTrap = true;
           } 
@@ -484,16 +483,15 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             _obstacles.add(Obstacle(type: 'platform', x: nextX + 480, y: 160, w: 180, h: 60)); 
             nextX += 720;
           } 
-          else if (rMode < 0.66) {
-            // ЛОВУШКА 2: 4 шипа на платформе в инверсии
-            // Ставим платформу на уровне y: 100, а шипы на её нижнюю грань (y: 160) острием вниз
+                    else if (rMode < 0.66) {
+            // ЛОВУШКА 2: 4 шипа сплошным рядом на платформе в инверсии
             _obstacles.add(Obstacle(type: 'platform', x: nextX, y: 100, w: 300, h: 60));
-            _obstacles.add(Obstacle(type: 'spike', x: nextX + 60, y: 160));
-            _obstacles.add(Obstacle(type: 'spike', x: nextX + 110, y: 160));
-            _obstacles.add(Obstacle(type: 'spike', x: nextX + 160, y: 160));
-            _obstacles.add(Obstacle(type: 'spike', x: nextX + 210, y: 160));
+            _obstacles.add(Obstacle(type: 'spike', x: nextX + 80, y: 160));
+            _obstacles.add(Obstacle(type: 'spike', x: nextX + 110, y: 160)); // Сдвинуты вплотную (шаг 30)
+            _obstacles.add(Obstacle(type: 'spike', x: nextX + 140, y: 160));
+            _obstacles.add(Obstacle(type: 'spike', x: nextX + 170, y: 160));
             nextX += 500;
-          } 
+          }  
           else {
             // ЛОВУШКА 3: Две платформы с большим расстоянием и парящей сферой между ними
             // Первая платформа
@@ -731,14 +729,15 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               double overlapX = math.min(_player.x + _player.size, obs.x + obs.w) - math.max(_player.x, obs.x);
               double overlapY = math.min(_player.y + _player.size, obs.y + obs.h) - math.max(_player.y, obs.y);
 
-              if (overlapY < overlapX) {
-                // Столкновение по вертикали (приземление)
-                if (!_isGravityInverted && _player.vy >= 0 && _player.y + _player.size - _player.vy <= obs.y + 12) {
+                            if (overlapY < overlapX) {
+                // ВЕРТИКАЛЬНОЕ КАСАНИЕ (Нахождение на платформе)
+                // Убрали жесткие проверки направления скорости _player.vy, фиксируем куб по факту пересечения граней
+                if (!_isGravityInverted && (_player.y + _player.size) <= obs.y + 14) {
                   _player.y = obs.y - _player.size;
                   _player.vy = 0;
                   _player.isGrounded = true;
                 } 
-                else if (_isGravityInverted && _player.vy <= 0 && _player.y - _player.vy >= obs.y + obs.h - 12) {
+                else if (_isGravityInverted && _player.y >= (obs.y + obs.h - 14)) {
                   _player.y = obs.y + obs.h;
                   _player.vy = 0;
                   _player.isGrounded = true;
