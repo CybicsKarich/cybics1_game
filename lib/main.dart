@@ -81,7 +81,7 @@ class Player {
   double size = 40;
   double vy = 0;
   double gravity = 1.5;
-  double jumpForce = -20;
+  double jumpForce = -17;
   bool isGrounded = true;
   bool isShip = false;
   double rotation = 0;
@@ -602,24 +602,25 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     });
   }
 
-  void _checkOrbActivation() {
+    void _checkOrbActivation() {
     if (!_isPlaying || _isPaused || _currentLevel != 4) return;
 
-        for (var orb in _orbs) {
-      // ОПТИМИЗАЦИЯ: Если сфера слишком далеко позади или впереди игрока, пропускаем её расчет
-      if (orb.x < _player.x - 100 || orb.x > _player.x + 200) continue;
-
+    for (var orb in _orbs) {
       if (!orb.collected) {
+        // ОПТИМИЗАЦИЯ: Проверяем только сферы в непосредственной близости
+        if (orb.x < _player.x - 50 || orb.x > _player.x + 120) continue;
+
         double distX = ((_player.x + _player.size / 2) - orb.x).abs();
         double distY = ((_player.y + _player.size / 2) - orb.y).abs();
         
-        if (distX < 80 && distY < 80) {
+        // ИСПРАВЛЕНИЕ: Уменьшаем радиус до 55, чтобы исключить ложные срабатывания при прыжках на блоках
+        if (distX < 55 && distY < 55) {
           setState(() {
             orb.collected = true;
             if (_isGravityInverted) {
-              _player.vy = 16;
+              _player.vy = 14.5;
             } else {
-              _player.vy = -16;
+              _player.vy = -14.5;
             }
             _player.isGrounded = false;
           });
@@ -629,7 +630,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     }
   }
 
-      void _updatePhysics() {
+
+        void _updatePhysics() {
     setState(() {
       _player.x += 7.5;
       _cameraX = _player.x - 200;
@@ -719,34 +721,34 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               }
             }
           } else if (obs.type == 'platform') {
-            // ВЕРТИКАЛЬНАЯ ПРОВЕРКА ОПОРЫ ПЛАТФОРМЫ (Исключает любые сквозные падения)
-            if (_player.x + _player.size > obs.x + 4 && _player.x < obs.x + obs.w - 4) {
+            // МАКСИМАЛЬНО ЖЕСТКАЯ ВЕРТИКАЛЬНАЯ ФИКСАЦИЯ БЛОКА
+            if (_player.x + _player.size > obs.x + 2 && _player.x < obs.x + obs.w - 2) {
               if (!_isGravityInverted) {
-                // Обычный режим: кубик падает на платформу сверху
-                if (_player.y + _player.size >= obs.y && _player.y + _player.size <= obs.y + 24) {
+                // Если кубик находится в плоскости верха платформы, он заземлен принудительно
+                if (_player.y + _player.size >= obs.y - 4 && _player.y + _player.size <= obs.y + 26) {
                   _player.y = obs.y - _player.size;
-                  _player.vy = 0;
+                  if (_player.vy > 0) _player.vy = 0;
                   _player.isGrounded = true;
-                  continue; 
+                  continue;
                 }
               } else {
-                // Режим инверсии: кубик прижимается к потолочной платформе снизу
-                if (_player.y <= obs.y + obs.h && _player.y >= obs.y + obs.h - 24) {
+                // В инверсии: жесткое удержание под потолочной платформой
+                if (_player.y >= obs.y + obs.h - 26 && _player.y <= obs.y + obs.h + 4) {
                   _player.y = obs.y + obs.h;
-                  _player.vy = 0;
+                  if (_player.vy < 0) _player.vy = 0;
                   _player.isGrounded = true;
-                  continue; 
+                  continue;
                 }
               }
             }
 
-            // ИЗОЛИРОВАННАЯ БОКОВАЯ ПРОВЕРКА (Смерть при прямом ударе в стену блока)
+            // БОКОВОЕ СТОЛКНОВЕНИЕ (Только если кубик врезается посередине блока)
             if (!isAutoFlying && !_isGodMode) {
               if (_player.x + _player.size > obs.x && _player.x < obs.x + obs.w) {
                 double pBottom = _player.y + _player.size;
                 double pTop = _player.y;
-                if ((!_isGravityInverted && pBottom > obs.y + 12 && pTop < obs.y + obs.h - 4) ||
-                    (_isGravityInverted && pTop < obs.y + obs.h - 12 && pBottom > obs.y + 4)) {
+                if ((!_isGravityInverted && pBottom > obs.y + 14 && pTop < obs.y + obs.h - 4) ||
+                    (_isGravityInverted && pTop < obs.y + obs.h - 14 && pBottom > obs.y + 4)) {
                   _gameOver();
                   return;
                 }
@@ -763,7 +765,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
         if (_isPressing && _player.isGrounded && !isAutoFlying) {
           if (_isGravityInverted) {
-            _player.vy = 12.0;
+            _player.vy = 11.5;
           } else {
             _player.vy = _player.jumpForce;
           }
@@ -834,20 +836,19 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               }
             }
           } else if (obs.type == 'platform') {
-            // ВЕРТИКАЛЬНАЯ ПРОВЕРКА ОПОРЫ ПЛАТФОРМЫ (Для кубика на 1, 2, 3 уровнях)
-            if (_player.x + _player.size > obs.x + 4 && _player.x < obs.x + obs.w - 4) {
-              if (_player.y + _player.size >= obs.y && _player.y + _player.size <= obs.y + 24) {
+            // НАЗЕМНЫЕ ПЛАТФОРМЫ: Нажимаем прыжок без риска провалиться
+            if (_player.x + _player.size > obs.x + 2 && _player.x < obs.x + obs.w - 2) {
+              if (_player.y + _player.size >= obs.y - 4 && _player.y + _player.size <= obs.y + 26) {
                 _player.y = obs.y - _player.size;
-                _player.vy = 0;
+                if (_player.vy > 0) _player.vy = 0;
                 _player.isGrounded = true;
                 continue; 
               }
             }
 
-            // БОКОВАЯ ПРОВЕРКА (Врезался в торец блока на полной скорости)
             if (!_isGodMode) {
               if (_player.x + _player.size > obs.x && _player.x < obs.x + obs.w) {
-                if (_player.y + _player.size > obs.y + 12 && _player.y < obs.y + obs.h - 4) {
+                if (_player.y + _player.size > obs.y + 14 && _player.y < obs.y + obs.h - 4) {
                   _gameOver();
                   return;
                 }
