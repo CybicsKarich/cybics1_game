@@ -483,15 +483,14 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             _obstacles.add(Obstacle(type: 'platform', x: nextX + 480, y: 160, w: 180, h: 60)); 
             nextX += 720;
           } 
-                    else if (rMode < 0.66) {
-            // ЛОВУШКА 2: 4 шипа сплошным рядом на платформе в инверсии
+                              else if (rMode < 0.66) {
+            // ЛОВУШКА 2: Теперь ровно 3 шипа сплошным рядом на платформе в инверсии
             _obstacles.add(Obstacle(type: 'platform', x: nextX, y: 100, w: 300, h: 60));
-            _obstacles.add(Obstacle(type: 'spike', x: nextX + 80, y: 160));
-            _obstacles.add(Obstacle(type: 'spike', x: nextX + 110, y: 160)); // Сдвинуты вплотную (шаг 30)
-            _obstacles.add(Obstacle(type: 'spike', x: nextX + 140, y: 160));
-            _obstacles.add(Obstacle(type: 'spike', x: nextX + 170, y: 160));
+            _obstacles.add(Obstacle(type: 'spike', x: nextX + 95, y: 160));
+            _obstacles.add(Obstacle(type: 'spike', x: nextX + 125, y: 160)); // 3 шипа вплотную
+            _obstacles.add(Obstacle(type: 'spike', x: nextX + 155, y: 160));
             nextX += 500;
-          }  
+          }   
           else {
             // ЛОВУШКА 3: Две платформы с большим расстоянием и парящей сферой между ними
             // Первая платформа
@@ -630,7 +629,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     }
   }
 
-    void _updatePhysics() {
+      void _updatePhysics() {
     setState(() {
       _player.x += 7.5;
       _cameraX = _player.x - 200;
@@ -707,7 +706,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         }
 
         for (var obs in _obstacles) {
-          // ОПТИМИЗАЦИЯ: Проверяем только объекты в радиусе видимости экрана (с запасом)
           if (obs.x < _player.x - 150 || obs.x > _player.x + 900) continue;
 
           if (obs.type == 'spike') {
@@ -721,35 +719,36 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               }
             }
           } else if (obs.type == 'platform') {
-            Rect pRect = Rect.fromLTWH(_player.x, _player.y, _player.size, _player.size);
-            Rect oRect = Rect.fromLTWH(obs.x, obs.y, obs.w, obs.h);
-
-            if (pRect.overlaps(oRect)) {
-              double overlapX = math.min(_player.x + _player.size, obs.x + obs.w) - math.max(_player.x, obs.x);
-              double overlapY = math.min(_player.y + _player.size, obs.y + obs.h) - math.max(_player.y, obs.y);
-
-              // ЖЕСТКАЯ ФИКСАЦИЯ ОПОРЫ ПЛАТФОРМЫ
-              if (overlapY <= overlapX + 2) {
-                if (!_isGravityInverted) {
-                  if (_player.y + _player.size / 2 < obs.y + obs.h / 2) {
-                    _player.y = obs.y - _player.size;
-                    if (_player.vy > 0) _player.vy = 0;
-                    _player.isGrounded = true;
-                  }
-                } else {
-                  if (_player.y + _player.size / 2 > obs.y + obs.h / 2) {
-                    _player.y = obs.y + obs.h;
-                    if (_player.vy < 0) _player.vy = 0;
-                    _player.isGrounded = true;
-                  }
+            // ВЕРТИКАЛЬНАЯ ПРОВЕРКА ОПОРЫ ПЛАТФОРМЫ (Исключает любые сквозные падения)
+            if (_player.x + _player.size > obs.x + 4 && _player.x < obs.x + obs.w - 4) {
+              if (!_isGravityInverted) {
+                // Обычный режим: кубик падает на платформу сверху
+                if (_player.y + _player.size >= obs.y && _player.y + _player.size <= obs.y + 24) {
+                  _player.y = obs.y - _player.size;
+                  _player.vy = 0;
+                  _player.isGrounded = true;
+                  continue; 
                 }
               } else {
-                // БОКОВОЙ ХИТБОКС (Смерть об стену)
-                if (!isAutoFlying && !_isGodMode) {
-                  if (overlapY > 8) {
-                    _gameOver();
-                    return;
-                  }
+                // Режим инверсии: кубик прижимается к потолочной платформе снизу
+                if (_player.y <= obs.y + obs.h && _player.y >= obs.y + obs.h - 24) {
+                  _player.y = obs.y + obs.h;
+                  _player.vy = 0;
+                  _player.isGrounded = true;
+                  continue; 
+                }
+              }
+            }
+
+            // ИЗОЛИРОВАННАЯ БОКОВАЯ ПРОВЕРКА (Смерть при прямом ударе в стену блока)
+            if (!isAutoFlying && !_isGodMode) {
+              if (_player.x + _player.size > obs.x && _player.x < obs.x + obs.w) {
+                double pBottom = _player.y + _player.size;
+                double pTop = _player.y;
+                if ((!_isGravityInverted && pBottom > obs.y + 12 && pTop < obs.y + obs.h - 4) ||
+                    (_isGravityInverted && pTop < obs.y + obs.h - 12 && pBottom > obs.y + 4)) {
+                  _gameOver();
+                  return;
                 }
               }
             }
@@ -810,7 +809,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         _currentProgress = (progressPct.clamp(0, 100)).floor();
 
         for (var m in _medals) {
-          // ОПТИМИЗАЦИЯ: Игнорируем далекие медали
           if (m.x < _player.x - 100 || m.x > _player.x + 200) continue;
 
           if (!m.collected) {
@@ -824,7 +822,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         }
 
         for (var obs in _obstacles) {
-          // ОПТИМИЗАЦИЯ: Проверяем только объекты рядом с игроком
           if (obs.x < _player.x - 150 || obs.x > _player.x + 900) continue;
 
           if (obs.type == 'spike') {
@@ -837,26 +834,22 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               }
             }
           } else if (obs.type == 'platform') {
-            Rect pRect = Rect.fromLTWH(_player.x, _player.y, _player.size, _player.size);
-            Rect oRect = Rect.fromLTWH(obs.x, obs.y, obs.w, obs.h);
+            // ВЕРТИКАЛЬНАЯ ПРОВЕРКА ОПОРЫ ПЛАТФОРМЫ (Для кубика на 1, 2, 3 уровнях)
+            if (_player.x + _player.size > obs.x + 4 && _player.x < obs.x + obs.w - 4) {
+              if (_player.y + _player.size >= obs.y && _player.y + _player.size <= obs.y + 24) {
+                _player.y = obs.y - _player.size;
+                _player.vy = 0;
+                _player.isGrounded = true;
+                continue; 
+              }
+            }
 
-            if (pRect.overlaps(oRect)) {
-              double overlapX = math.min(_player.x + _player.size, obs.x + obs.w) - math.max(_player.x, obs.x);
-              double overlapY = math.min(_player.y + _player.size, obs.y + obs.h) - math.max(_player.y, obs.y);
-
-              // ХИТБОКСЫ ПЛАТФОРМЫ ВСЕГДА ОСТАЮТСЯ АКТИВНЫМИ ПРИ ПРЫЖКЕ
-              if (overlapY <= overlapX + 2) {
-                if (_player.y + _player.size / 2 < obs.y + obs.h / 2) {
-                  _player.y = obs.y - _player.size;
-                  if (_player.vy > 0) _player.vy = 0;
-                  _player.isGrounded = true;
-                }
-              } else {
-                if (!_isGodMode) {
-                  if (overlapY > 8) {
-                    _gameOver();
-                    return;
-                  }
+            // БОКОВАЯ ПРОВЕРКА (Врезался в торец блока на полной скорости)
+            if (!_isGodMode) {
+              if (_player.x + _player.size > obs.x && _player.x < obs.x + obs.w) {
+                if (_player.y + _player.size > obs.y + 12 && _player.y < obs.y + obs.h - 4) {
+                  _gameOver();
+                  return;
                 }
               }
             }
@@ -899,6 +892,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       }
     });
   }
+
 
   void _gameOver() {
     _gameTimer?.cancel();
