@@ -836,8 +836,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       if (!_isGodMode) { _gameOver(); return; }
     }
 
-            // ==========================================
-    // ЭТАП 3: РАСЧЕТ КОЛЛИЗИЙ (ПЛАТФОРМЫ И ШИПЫ)
+                // ==========================================
+    // ЭТАП 3: РАСЧЕТ КОЛЛИЗИЙ (РАЗДЕЛЬНЫЕ ЦИКЛЫ)
     // ==========================================
     _currentProgress = (progressPct.clamp(0, 100)).floor();
 
@@ -856,55 +856,60 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       }
     }
 
-        for (var obs in _obstacles) {
-      // Отсекаем объекты, которые далеко за пределами экрана (с учетом длины платформы)
-      if (obs.x + (obs.type == 'platform' ? obs.w : 30) < _player.x - 150 || obs.x > _player.x + 900) continue;
+    // ЦИКЛ А: ОБРАБОТКА ТОЛЬКО ШИПОВ
+    for (var obs in _obstacles) {
+      if (obs.type != 'spike') continue; // Пропускаем всё, что не шип
+      if (obs.x < _player.x - 150 || obs.x > _player.x + 900) continue;
 
-      if (obs.type == 'spike') {
-        bool isUpsideDown = (obs.y < 200);
-        if (_player.x + _player.size > obs.x + 8 && _player.x < obs.x + 22 &&
-            ((!isUpsideDown && _player.y + _player.size > obs.y - 30 && _player.y < obs.y) ||
-             (isUpsideDown && _player.y < obs.y + 30 && _player.y + _player.size > obs.y))) {
-          if (!_isGodMode) { _gameOver(); return; }
-        }
-      } // СЮДА СМОТРИ: Эта скобка закрывает "if (obs.type == 'spike')"
-      else if (obs.type == 'platform') {
-        bool stoodOnPlatform = false;
+      bool isUpsideDown = (obs.y < 200);
+      if (_player.x + _player.size > obs.x + 8 && _player.x < obs.x + 22 &&
+          ((!isUpsideDown && _player.y + _player.size > obs.y - 30 && _player.y < obs.y) ||
+           (isUpsideDown && _player.y < obs.y + 30 && _player.y + _player.size > obs.y))) {
+        if (!_isGodMode) { _gameOver(); return; }
+      }
+    }
 
-        // Железобетонный захват поверхности блока
-        if (_player.x + _player.size > obs.x + 2 && _player.x < obs.x + obs.w - 2) {
-          if (_currentLevel == 4 && _isGravityInverted) {
-            // В инверсии ловим у потолка
-            if (_player.vy <= 0 && _player.y <= obs.y + obs.h && _player.y >= obs.y + obs.h - 32) {
-              _player.y = obs.y + obs.h;
-              _player.vy = 0;
-              _player.isGrounded = true;
-              stoodOnPlatform = true;
-            }
-          } else {
-            // Ообычный режим (все уровни): ловим на поверхности блока
-            if (_player.vy >= 0 && _player.y + _player.size >= obs.y && _player.y + _player.size <= obs.y + 32) {
-              _player.y = obs.y - _player.size;
-              _player.vy = 0;
-              _player.isGrounded = true;
-              stoodOnPlatform = true;
-            }
+    // ЦИКЛ Б: ОБРАБОТКА ТОЛЬКО ПЛАТФОРМ
+    for (var obs in _obstacles) {
+      if (obs.type != 'platform') continue; // Пропускаем всё, что не платформа
+      if (obs.x + obs.w < _player.x - 150 || obs.x > _player.x + 900) continue;
+
+      bool stoodOnPlatform = false;
+
+      // Железобетонный захват поверхности блока
+      if (_player.x + _player.size > obs.x + 2 && _player.x < obs.x + obs.w - 2) {
+        if (_currentLevel == 4 && _isGravityInverted) {
+          // В инверсии ловим у потолка
+          if (_player.vy <= 0 && _player.y <= obs.y + obs.h && _player.y >= obs.y + obs.h - 32) {
+            _player.y = obs.y + obs.h;
+            _player.vy = 0;
+            _player.isGrounded = true;
+            stoodOnPlatform = true;
+          }
+        } else {
+          // Обычный режим (все уровни): ловим на поверхности блока
+          if (_player.vy >= 0 && _player.y + _player.size >= obs.y && _player.y + _player.size <= obs.y + 32) {
+            _player.y = obs.y - _player.size;
+            _player.vy = 0;
+            _player.isGrounded = true;
+            stoodOnPlatform = true;
           }
         }
+      }
 
-        if (stoodOnPlatform) continue;
+      if (stoodOnPlatform) continue;
 
-        // Честная смерть от удара в торец
-        if (!_isGodMode) {
-          if (_player.x + _player.size > obs.x && _player.x < obs.x + obs.w) {
-            if (_player.y + _player.size > obs.y + 10 && _player.y < obs.y + obs.h - 10) {
-              _gameOver();
-              return;
-            }
+      // Честная смерть от удара в торец
+      if (!_isGodMode) {
+        if (_player.x + _player.size > obs.x && _player.x < obs.x + obs.w) {
+          if (_player.y + _player.size > obs.y + 10 && _player.y < obs.y + obs.h - 10) {
+            _gameOver();
+            return;
           }
         }
-      } // Эта скобка закрывает "else if (obs.type == 'platform')"
-    } // Эта скобка закрывает сам цикл "for (var obs in _obstacles)"
+      }
+    }
+
 
 
     // Вращение куба в воздухе
