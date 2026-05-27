@@ -856,7 +856,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       }
     }
 
-    for (var obs in _obstacles) {
+        for (var obs in _obstacles) {
       // Отсекаем объекты, которые далеко за пределами экрана (с учетом длины платформы)
       if (obs.x + (obs.type == 'platform' ? obs.w : 30) < _player.x - 150 || obs.x > _player.x + 900) continue;
 
@@ -867,7 +867,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
              (isUpsideDown && _player.y < obs.y + 30 && _player.y + _player.size > obs.y))) {
           if (!_isGodMode) { _gameOver(); return; }
         }
-      } 
+      } // СЮДА СМОТРИ: Эта скобка закрывает "if (obs.type == 'spike')"
       else if (obs.type == 'platform') {
         bool stoodOnPlatform = false;
 
@@ -882,7 +882,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               stoodOnPlatform = true;
             }
           } else {
-            // Обычный режим (все уровни): ловим на поверхности блока
+            // Ообычный режим (все уровни): ловим на поверхности блока
             if (_player.vy >= 0 && _player.y + _player.size >= obs.y && _player.y + _player.size <= obs.y + 32) {
               _player.y = obs.y - _player.size;
               _player.vy = 0;
@@ -903,8 +903,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             }
           }
         }
-      }
-    }
+      } // Эта скобка закрывает "else if (obs.type == 'platform')"
+    } // Эта скобка закрывает сам цикл "for (var obs in _obstacles)"
+
 
     // Вращение куба в воздухе
     if (_currentLevel == 4) {
