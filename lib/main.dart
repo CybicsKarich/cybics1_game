@@ -751,12 +751,11 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       if (!_isGodMode) { _gameOver(); return; }
     }
 
-    // ==========================================
+        // ==========================================
     // ЭТАП 3: РАСЧЕТ КОЛЛИЗИЙ (ПЛАТФОРМЫ И ШИПЫ)
     // ==========================================
     _currentProgress = (progressPct.clamp(0, 100)).floor();
 
-    // Сбор секретных монет (медалей)
     if (_currentLevel != 4) {
       for (var m in _medals) {
         if (m.x < _player.x - 100 || m.x > _player.x + 200) continue;
@@ -772,8 +771,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     }
 
     for (var obs in _obstacles) {
-      // Отсекаем объекты, которые далеко за пределами экрана
-      if (obs.x < _player.x - 150 || obs.x > _player.x + 900) continue;
+      // ИСПРАВЛЕНИЕ: Теперь учитываем полную ширину платформы (obs.x + obs.w), 
+      // чтобы длинные блоки не отсекались физикой раньше времени, пока игрок бежит по ним!
+      if (obs.x + (obs.type == 'platform' ? obs.w : 30) < _player.x - 150 || obs.x > _player.x + 900) continue;
 
       if (obs.type == 'spike') {
         bool isUpsideDown = (obs.y < 200);
@@ -786,10 +786,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       else if (obs.type == 'platform') {
         bool stoodOnPlatform = false;
 
-        // ИСПРАВЛЕНИЕ БАГА ПРОВАЛА: Зазор увеличен до 32px, чтобы ловить кубик на любой вертикальной скорости
         if (_player.x + _player.size > obs.x + 2 && _player.x < obs.x + obs.w - 2) {
           if (_currentLevel == 4 && _isGravityInverted) {
-            // Режим инверсии: ловим персонажа снизу вверх под потолочным блоком
             if (_player.vy <= 0 && _player.y <= obs.y + obs.h && _player.y >= obs.y + obs.h - 32) {
               _player.y = obs.y + obs.h;
               _player.vy = 0;
@@ -797,7 +795,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               stoodOnPlatform = true;
             }
           } else {
-            // Обычный режим: ловим падающего игрока строго на верхней поверхности блока
             if (_player.vy >= 0 && _player.y + _player.size >= obs.y && _player.y + _player.size <= obs.y + 32) {
               _player.y = obs.y - _player.size;
               _player.vy = 0;
@@ -807,13 +804,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           }
         }
 
-        // Если кубик твердо встал на платформу, торцевой удар (смерть) не обрабатывается
         if (stoodOnPlatform) continue;
 
-        // Честный удар в боковой торец блока (смерть)
         if (!_isGodMode) {
           if (_player.x + _player.size > obs.x && _player.x < obs.x + obs.w) {
-            // Удар засчитывается только если игрок врезался глубоко в боковую стенку блока
             if (_player.y + _player.size > obs.y + 10 && _player.y < obs.y + obs.h - 10) {
               _gameOver();
               return;
@@ -1623,32 +1617,34 @@ class GamePainter extends CustomPainter {
       canvas.restore();
     }
 
-    // ==========================================
-    // ИСПРАВЛЕННЫЙ БЛОК 7: ОРИГИНАЛЬНЫЙ ПЕРСОНАЖ
+        // ==========================================
+    // ИСПРАВЛЕННЫЙ БЛОК 7: ОТРИСОВКА ПЕРСОНАЖА
     // ==========================================
     if (isPlaying) {
       canvas.save();
-      // Центрируем матрицу canvas по центру персонажа для корректного вращения
       canvas.translate(player.x - cameraX + player.size / 2, player.y + player.size / 2);
       canvas.rotate(player.rotation);
 
       if (player.isShip) {
-        // ВОЗВРАЩЕН ОРИГИНАЛЬНЫЙ ВИД САМОЛЁТИКА ИЗ ТВОЕЙ ИСХОДНОЙ СБОРКИ
         paint.color = const Color(0xFFC084FC);
+        
+        // Математически точный равносторонний треугольник, смотрящий СТРОГО ВПЕРЁД (вправо)
+        // Высота и основание сбалансированы относительно центра player.size / 2
+        double halfSize = player.size / 2;
         Path shipPath = Path()
-          ..moveTo(-player.size / 2, 0)
-          ..lineTo(player.size / 2, -player.size / 4)
-          ..lineTo(player.size / 4, player.size / 2)
+          ..moveTo(-halfSize, -halfSize) // Левый верхний угол (корма)
+          ..lineTo(-halfSize, halfSize)  // Левый нижний угол (корма)
+          ..lineTo(halfSize * 1.15, 0)   // Нос корабля (направлен строго вперёд по X)
           ..close();
         canvas.drawPath(shipPath, paint);
 
         paint.style = PaintingStyle.stroke;
         paint.color = Colors.white;
-        paint.strokeWidth = 2;
+        paint.strokeWidth = 2.5; // Сделаем контур чуть четче
         canvas.drawPath(shipPath, paint);
         paint.style = PaintingStyle.fill;
       } else {
-        // Отрисовка стандартного кубика Cybics
+        // Отрисовка кубика
         paint.color = const Color(0xFF00F2FE);
         canvas.drawRect(Rect.fromCircle(center: Offset.zero, radius: player.size / 2), paint);
 
@@ -1660,6 +1656,7 @@ class GamePainter extends CustomPainter {
       }
       canvas.restore();
     }
+
 
 
         // ==========================================
