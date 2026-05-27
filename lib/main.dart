@@ -814,7 +814,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           _player.isGrounded = true;
         }
       }
-    } else {
+      }
+   } else {
       if (_player.isShip) {
         if (_isPressing) _player.vy -= 0.9; else _player.vy += 0.7;
         _player.vy = _player.vy.clamp(-8, 8);
