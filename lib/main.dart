@@ -620,33 +620,36 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 });
   }
 
-    void _checkOrbActivation() {
+      void _checkOrbActivation() {
     if (!_isPlaying || _isPaused || _currentLevel != 4) return;
 
-    for (var orb in _orbs) {
-      if (!orb.collected) {
-        // ОПТИМИЗАЦИЯ: Проверяем только сферы в непосредственной близости
-        if (orb.x < _player.x - 50 || orb.x > _player.x + 120) continue;
+    final double playerCenterX = _player.x + _player.size / 2;
+    final double playerCenterY = _player.y + _player.size / 2;
 
-        double distX = ((_player.x + _player.size / 2) - orb.x).abs();
-        double distY = ((_player.y + _player.size / 2) - orb.y).abs();
+    for (var orb in _orbs) {
+      if (orb.collected) continue;
+
+      // НАСТРОЙКА: Расширяем окно предварительного поиска сферы по X (с 120 до 150)
+      if (orb.x < _player.x - 60 || orb.x > _player.x + 150) continue;
+
+      double distX = (playerCenterX - orb.x).abs();
+      double distY = (playerCenterY - orb.y).abs();
+      
+      // НАСТРОЙКА: Увеличиваем радиус активации сферы с 55 до 70 пикселей для большего пространства
+      if (distX < 70 && distY < 70) {
+        orb.collected = true;
         
-        // ИСПРАВЛЕНИЕ: Уменьшаем радиус до 55, чтобы исключить ложные срабатывания при прыжках на блоках
-        if (distX < 55 && distY < 55) {
-          setState(() {
-            orb.collected = true;
-            if (_isGravityInverted) {
-              _player.vy = 14.5;
-            } else {
-              _player.vy = -14.5;
-            }
-            _player.isGrounded = false;
-          });
-          break;
+        if (_isGravityInverted) {
+          _player.vy = 14.5;
+        } else {
+          _player.vy = -14.5;
         }
+        _player.isGrounded = false;
+        break;
       }
     }
   }
+
 
 
     void _updatePhysics() {
@@ -686,7 +689,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       bool isAutoFlying = _isGravityInverted && (_player.x < portalInX + 600);
 
       if (_isPressing && _player.isGrounded && !isAutoFlying) {
-        _player.vy = _isGravityInverted ? 20.0 : _player.jumpForce;
+        _player.vy = _isGravityInverted ? 17.0 : _player.jumpForce;
         _player.isGrounded = false;
       }
     } else {
@@ -715,8 +718,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           _player.isGrounded = true;
         }
       } else if (_isGravityInverted) {
-        _player.vy -= 1.5; 
-          if (_player.vy < -15) _player.vy = -15;;
+        _player.vy -= 1.3; 
+          if (_player.vy < -14) _player.vy = -14;;
         _player.y += _player.vy;
         if (_player.y <= 30 && !wasGrounded && !_isGodMode) { _gameOver(); return; }
       } else {
@@ -1625,22 +1628,25 @@ class GamePainter extends CustomPainter {
       canvas.translate(player.x - cameraX + player.size / 2, player.y + player.size / 2);
       canvas.rotate(player.rotation);
 
-      if (player.isShip) {
+            if (player.isShip) {
         paint.color = const Color(0xFFC084FC);
         
-        // Математически точный равносторонний треугольник, смотрящий СТРОГО ВПЕРЁД (вправо)
-        // Высота и основание сбалансированы относительно центра player.size / 2
-        double halfSize = player.size / 2;
+        // НАСТРОЙКА: Немного уменьшаем общий размер самолётика для маневренности
+        double currentSize = player.size * 0.85; 
+        double halfW = currentSize / 2; // Половина ширины (высоты треугольника)
+        double halfH = currentSize / 2.6; // Уменьшаем высоту основания, чтобы сделать его уже
+
+        // Равнобедренный треугольник, вытянутый вперед строго параллельно линии пола
         Path shipPath = Path()
-          ..moveTo(-halfSize, -halfSize) // Левый верхний угол (корма)
-          ..lineTo(-halfSize, halfSize)  // Левый нижний угол (корма)
-          ..lineTo(halfSize * 1.15, 0)   // Нос корабля (направлен строго вперёд по X)
+          ..moveTo(-halfW, -halfH) // Верхний хвост (корма)
+          ..lineTo(-halfW, halfH)  // Нижний хвост (корма)
+          ..lineTo(halfW * 1.3, 0) // Вытянутый нос корабля (смотрит строго вправо по оси X)
           ..close();
         canvas.drawPath(shipPath, paint);
 
         paint.style = PaintingStyle.stroke;
         paint.color = Colors.white;
-        paint.strokeWidth = 2.5; // Сделаем контур чуть четче
+        paint.strokeWidth = 2.0;
         canvas.drawPath(shipPath, paint);
         paint.style = PaintingStyle.fill;
       } else {
