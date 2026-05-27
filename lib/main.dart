@@ -474,18 +474,25 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         }
       }
     }
-        else if (_currentLevel == 4) {
+            else if (_currentLevel == 4) {
       int seed = 4444; 
       int invertedSeed = 8585;
       _orbs.clear();
+      _medals.clear(); // РАЗРЕШАЕМ МЕДАЛИ НА 4 УРОВНЕ
       double portalInX = _levelLength * 0.35;
-      double portalOutX = _levelLength * 0.70; // Конец зоны инверсии (70%)
-      bool safeGapSpawned = false; // Флаг для создания безопасной дистанции
+      double portalOutX = _levelLength * 0.70; 
+      bool safeGapSpawned = false;
+
+      // Флаги заскриптованных ловушек под медали
+      bool spawnedMedal1Obstacle = false;
+      bool spawnedMedal2Obstacle = false;
+      bool spawnedMedal3Obstacle = false;
 
       while (nextX < _levelLength - 1000) {
         double progressPct = (nextX / _levelLength) * 100;
         bool isGravityZone = progressPct >= 35 && progressPct <= 70;
 
+        // --- ЗОНА ИНВЕРСИИ ГРАВИТАЦИИ (35% - 70%) ---
         if (isGravityZone) {
           if (nextX < portalInX + 500) {
             _obstacles.add(Obstacle(type: 'platform', x: portalInX, y: 130, w: 350, h: 30));
@@ -493,39 +500,101 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             continue;
           }
 
-          double rMode = _seededRandom(invertedSeed++);
+          // МЕДАЛЬ №2: Ровно на 50% над платформой с 3 шипами
+          if (progressPct >= 50.0 && !spawnedMedal2Obstacle) {
+            double platX = nextX;
+            double platY = 100;
+            _obstacles.add(Obstacle(type: 'platform', x: platX, y: platY, w: 300, h: 60));
+            _obstacles.add(Obstacle(type: 'spike', x: platX + 95, y: 160));
+            _obstacles.add(Obstacle(type: 'spike', x: platX + 125, y: 160)); 
+            _obstacles.add(Obstacle(type: 'spike', x: platX + 155, y: 160));
 
+            // Сфера активации прыжка вниз (к потолку)
+            _orbs.add(GameOrb(x: platX + 40, y: platY + 110, collected: false));
+            // Медаль на самой высокой (глубокой) точке прыжка сферы
+            _medals.add(Medal(id: 1, x: platX + 140, y: platY + 195));
+
+            nextX += 550;
+            spawnedMedal2Obstacle = true;
+            continue;
+          }
+
+          // МЕДАЛЬ №3: Скрытая медаль на 67% в пропасти перед концом инверсии
+          if (progressPct >= 66.5 && progressPct <= 68.5 && !spawnedMedal3Obstacle) {
+            double m3X = nextX;
+            // Первая платформа
+            _obstacles.add(Obstacle(type: 'platform', x: m3X, y: 100, w: 150, h: 60));
+            
+            // Если игрок падает в пропасть — там его ждет медаль
+            _medals.add(Medal(id: 2, x: m3X + 265, y: 320)); 
+            // СПАСИТЕЛЬНЫЙ ПОЛ: Платформа-туннель внизу пропасти, чтобы кубик не падал в пустоту
+            _obstacles.add(Obstacle(type: 'platform', x: m3X + 130, y: 380, w: 270, h: 20));
+            // Дополнительный портал нормализации гравитации внизу пропасти
+            _obstacles.add(Obstacle(type: 'platform', x: m3X + 350, y: 380, w: 50, h: 200));
+
+            // Обычный верхний путь через сферу (для тех кто проходит без медали)
+            _orbs.add(GameOrb(x: m3X + 265, y: 220, collected: false));
+            
+            // Вторая платформа
+            _obstacles.add(Obstacle(type: 'platform', x: m3X + 380, y: 100, w: 150, h: 60));
+            
+            nextX += 650;
+            spawnedMedal3Obstacle = true;
+            continue;
+          }
+
+          // Обычная генерация инверсии
+          double rMode = _seededRandom(invertedSeed++);
           if (rMode < 0.33) {
             _obstacles.add(Obstacle(type: 'platform', x: nextX, y: 80, w: 180, h: 60));
             _obstacles.add(Obstacle(type: 'platform', x: nextX + 240, y: 120, w: 180, h: 60)); 
             _obstacles.add(Obstacle(type: 'platform', x: nextX + 480, y: 160, w: 180, h: 60)); 
             nextX += 720;
-          } 
-          else if (rMode < 0.66) {
+          } else if (rMode < 0.66) {
             _obstacles.add(Obstacle(type: 'platform', x: nextX, y: 100, w: 300, h: 60));
             _obstacles.add(Obstacle(type: 'spike', x: nextX + 95, y: 160));
             _obstacles.add(Obstacle(type: 'spike', x: nextX + 125, y: 160)); 
             _obstacles.add(Obstacle(type: 'spike', x: nextX + 155, y: 160));
             nextX += 500;
-          }   
-          else {
+          } else {
             _obstacles.add(Obstacle(type: 'platform', x: nextX, y: 100, w: 150, h: 60));
             _orbs.add(GameOrb(x: nextX + 265, y: 220, collected: false));
             _obstacles.add(Obstacle(type: 'platform', x: nextX + 380, y: 100, w: 150, h: 60));
             nextX += 650;
           }
-        } else {
-          // ==========================================
-          // ИСПРАВЛЕНИЕ: БЕЗОПАСНЫЙ ЗАЗОР ПОСЛЕ ИНВЕРСИИ
-          // ==========================================
-          // Если мы только что вышли из зоны инверсии и еще не делали отступ
+        } 
+        // --- НАЗЕМНАЯ ЗОНА ОБЫЧНОЙ ГРАВИТАЦИИ ---
+        else {
           if (progressPct > 70 && !safeGapSpawned) {
-            nextX = portalOutX + 600; // Сдвигаем генерацию первого препятствия на 600px вперед
-            safeGapSpawned = true; // Фиксируем, что зазор создан
-            continue; // Переходим к следующему шагу цикла без спавна препятствий
+            nextX = portalOutX + 600;
+            safeGapSpawned = true;
+            continue;
           }
 
-          // --- НАЗЕМНЫЕ ПРЕПЯТСТВИЯ С ОБЯЗАТЕЛЬНЫМИ СФЕРАМИ (ОРБАМИ) ---
+          // МЕДАЛЬ №1: На 28% пути на платформе над шипами
+          if (progressPct >= 27.5 && progressPct <= 29.5 && !spawnedMedal1Obstacle) {
+            double startX = nextX;
+            // Большое количество шипов внизу
+            for (int i = 0; i < 7; i++) {
+              _obstacles.add(Obstacle(type: 'spike', x: startX + (i * 30), y: _floorY));
+            }
+            // Первая сфера перед шипами
+            _orbs.add(GameOrb(x: startX + 20, y: _floorY - 90, collected: false));
+            // Вторая сфера чуть выше и правее для прыжка к монете
+            _orbs.add(GameOrb(x: startX + 110, y: _floorY - 170, collected: false));
+            
+            // Медаль на вершине конструкции
+            _medals.add(Medal(id: 0, x: startX + 150, y: _floorY - 240));
+            
+            // Платформа после шипов
+            _obstacles.add(Obstacle(type: 'platform', x: startX + 230, y: _floorY - 80, w: 150, h: 80));
+            
+            nextX += 550;
+            spawnedMedal1Obstacle = true;
+            continue;
+          }
+
+          // Наземный рандом
           double r = _seededRandom(seed++);
           if (r < 0.35) {
             _orbs.add(GameOrb(x: nextX + 110, y: _floorY - 110, collected: false));
@@ -535,8 +604,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             _obstacles.add(Obstacle(type: 'spike', x: nextX + 120, y: _floorY));
             _obstacles.add(Obstacle(type: 'spike', x: nextX + 150, y: _floorY)); 
             nextX += 510;
-          } 
-          else if (r < 0.70) {
+          } else if (r < 0.70) {
             _orbs.add(GameOrb(x: nextX + 50, y: _floorY - 90, collected: false));
             _orbs.add(GameOrb(x: nextX + 200, y: _floorY - 170, collected: false));
             for (int i = 0; i < 9; i++) {
@@ -544,8 +612,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             }
             _obstacles.add(Obstacle(type: 'platform', x: nextX + 280, y: _floorY - 80, w: 120, h: 80));
             nextX += 560; 
-          } 
-          else {
+          } else {
             _obstacles.add(Obstacle(type: 'platform', x: nextX, y: _floorY - 50, w: 100, h: 50));
             _orbs.add(GameOrb(x: nextX + 200, y: _floorY - 140, collected: false));
             _obstacles.add(Obstacle(type: 'spike', x: nextX + 130, y: _floorY));
@@ -720,12 +787,26 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           _player.y = targetPlatformY;
           _player.isGrounded = true;
         }
-      } else if (_isGravityInverted) {
-        _player.vy -= 1.3; 
-          if (_player.vy < -14) _player.vy = -14;;
-        _player.y += _player.vy;
-        if (_player.y <= 30 && !wasGrounded && !_isGodMode) { _gameOver(); return; }
-      } else {
+              } else if (_isGravityInverted) {
+          _player.vy -= 1.3;
+          if (_player.vy < -14) _player.vy = -14;
+          _player.y += _player.vy;
+
+          // ИСПРАВЛЕНИЕ: Ограничиваем смертельную зону потолка и отключаем её на 64%-69%, 
+          // чтобы кубик мог спокойно упасть в пропасть за скрытой медалью №3 и зайти в туннель
+          if (progressPct >= 64.0 && progressPct <= 69.0) {
+            // Если игрок упал глубоко в пропасть, автоматически выключаем инверсию гравитации (телепортируем на нормальный путь)
+            if (_player.y >= 350) {
+              _isGravityInverted = false;
+              _player.vy = 0;
+            }
+          } else {
+            // Вне секретной зоны потолочная смерть работает стандартно, но с более мягким порогом (y <= 10 вместо y <= 30)
+            if (_player.y <= 10 && !wasGrounded && !_isGodMode) { 
+              _gameOver(); 
+              return; 
+            }
+          } else {
         _player.vy += _player.gravity;
         if (_player.vy > 15) _player.vy = 15;
         _player.y += _player.vy;
@@ -880,34 +961,52 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       _player.y += (portalTargetY - (_player.y + _player.size / 2)) * 0.12;
     }
 
-    // 4. ПРОВЕРКА ФИНАША: срабатывает строго при пересечении черты портала
+    // ==========================================
+    // ЭТАП 5: ПРОВЕРКА ФИНАЛА И СОХРАНЕНИЕ
+    // ==========================================
     if (_player.x >= _levelLength) {
       _gameTimer?.cancel();
       _isPlaying = false;
-      _portalParticles.clear(); // Очищаем массив после остановки игры
+      _portalParticles.clear(); // Убираем искры
       
-      // Сохраняем прогресс (твой оригинальный код)
+      // ИСПРАВЛЕНИЕ: Динамическое сохранение рекорда и собранных медалей
       if (_currentLevel == 1) {
-        _maxProgress = 100; _prefs.setInt('cybics_max_progress', 100);
+        _maxProgress = 100; 
+        _prefs.setInt('cybics_max_progress', 100);
       } else if (_currentLevel == 2) {
-        _maxProgress2 = 100; _prefs.setInt('cybics_max_progress_2', 100);
-        for (var id in _collectedThisRun) _savedMedals2[id] = true;
+        _maxProgress2 = 100; 
+        _prefs.setInt('cybics_max_progress_2', 100);
+        // Запись только тех медалей, которые собрали (Максимум 2 медали для 2 уровня)
+        for (var id in _collectedThisRun) {
+          if (id < _savedMedals2.length) _savedMedals2[id] = true;
+        }
         _prefs.setString('cybics_medals_2', jsonEncode(_savedMedals2));
       } else if (_currentLevel == 3) {
-        _maxProgress3 = 100; _prefs.setInt('cybics_max_progress_3', 100);
-        for (var id in _collectedThisRun) _savedMedals3[id] = true;
+        _maxProgress3 = 100; 
+        _prefs.setInt('cybics_max_progress_3', 100);
+        for (var id in _collectedThisRun) {
+          if (id < _savedMedals3.length) _savedMedals3[id] = true;
+        }
         _prefs.setString('cybics_medals_3', jsonEncode(_savedMedals3));
       } else if (_currentLevel == 4) {
-        _maxProgress4 = 100; _prefs.setInt('cybics_max_progress_4', 100);
+        _maxProgress4 = 100; 
+        _prefs.setInt('cybics_max_progress_4', 100);
+        for (var id in _collectedThisRun) {
+          if (id < _savedMedals4.length) _savedMedals4[id] = true;
+        }
+        _prefs.setString('cybics_medals_4', jsonEncode(_savedMedals4));
       }
       _stopAllLevelTracks();
 
+      // Выводим экран победы. Закрытие ручное, по кнопке "ОК"
       if (mounted) {
-        setState(() { _showVictory = true; });
+        setState(() { 
+          _showVictory = true; 
+        });
       }
     }
-   }
-
+  } // Конец метода _updatePhysics
+}
  
   void _gameOver() {
     _gameTimer?.cancel();
@@ -953,6 +1052,18 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         timer.cancel();
         return;
       }
+          // Перед вызовом setState в _gameOver добавь этот блок сохранения:
+    for (var id in _collectedThisRun) {
+      if (_currentLevel == 1) _savedMedals1[id] = true;
+      if (_currentLevel == 2) _savedMedals2[id] = true;
+      if (_currentLevel == 3) _savedMedals3[id] = true;
+      if (_currentLevel == 4) _savedMedals4[id] = true;
+    }
+    _prefs.setString('cybics_medals_1', jsonEncode(_savedMedals1));
+    _prefs.setString('cybics_medals_2', jsonEncode(_savedMedals2));
+    _prefs.setString('cybics_medals_3', jsonEncode(_savedMedals3));
+    _prefs.setString('cybics_medals_4', jsonEncode(_savedMedals4));
+
       setState(() {
         for (var p in _deathParticles) {
           p.x += p.vx;
