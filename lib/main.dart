@@ -141,9 +141,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   List<BgItem> _bgItems = [];
   List<DeathParticle> _deathParticles = [];
   List<GameOrb> _orbs = [];
+  final List<DeathParticle> _portalParticles = [];
   double _orbSpinAngle = 0;
   bool _isGravityInverted = false;
-  final List<DeathParticle> _portalParticles = [];
   List<int> _collectedThisRun = [];
   int _currentProgress = 0;
   bool _isPressing = false;
@@ -617,7 +617,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
         _gameTimer = Timer.periodic(const Duration(milliseconds: 16), (timer) {
   if (_isPlaying && !_isPaused) {
-    _updatePhysics(); // Считаем физику в фоне
+    _ysics(); // Считаем физику в фоне
     _gameTickNotifier.value++; // Даем холсту сигнал: "пора рисовать"
   }
 });
@@ -839,13 +839,54 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       }
     }
 
-        // Проверка финиша уровня
+            // ==========================================
+    // ЭТАП 4: ЛОГИКА ФИНАЛЬНОГО ПОРТАЛА И ИСКР
+    // ==========================================
+    double portalTargetY = _floorY - 150; // Центр твоего овального портала
+
+    // 1. ГЕНЕРАЦИЯ ИСКР: если игрок приблизился к финишу (за 1000 пикселей)
+    if (_player.x >= _levelLength - 1000 && _player.x < _levelLength + 300) {
+      var rand = math.Random();
+      if (rand.nextDouble() < 0.4) { // Спавним искры порциями для плавности
+        double pAngle = rand.nextDouble() * math.pi * 2;
+        double pSpeed = 1 + rand.nextDouble() * 3;
+        _portalParticles.add(DeathParticle(
+          x: _levelLength + (rand.nextDouble() * 40 - 20),
+          y: portalTargetY + (rand.nextDouble() * 160 - 80),
+          vx: -math.cos(pAngle).abs() * pSpeed - 2, // Левые вылетающие искры
+          vy: math.sin(pAngle) * pSpeed,
+          size: 4 + rand.nextDouble() * 4,
+          alpha: 1.0,
+        ));
+      }
+    }
+
+    // 2. ДВИЖЕНИЕ ИСКР: обновляем их координаты каждый кадр
+    for (int i = _portalParticles.length - 1; i >= 0; i--) {
+      var p = _portalParticles[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      p.alpha -= 0.02; // Плавное затухание
+      if (p.alpha <= 0) {
+        _portalParticles.removeAt(i);
+      }
+    }
+
+    // 3. АВТОЗАТЯГИВАНИЕ: Если игрок подлетает к порталу ближе чем на 250px
+    if (_player.x >= _levelLength - 250 && _isPlaying) {
+      _player.vy = 0;
+      _player.isGrounded = false;
+      // Плавно притягиваем координату Y кубика к центру портала (эффект магнита)
+      _player.y += (portalTargetY - (_player.y + _player.size / 2)) * 0.12;
+    }
+
+    // 4. ПРОВЕРКА ФИНАША: срабатывает строго при пересечении черты портала
     if (_player.x >= _levelLength) {
       _gameTimer?.cancel();
       _isPlaying = false;
-      _portalParticles.clear(); // Очищаем искры портала
+      _portalParticles.clear(); // Очищаем массив после остановки игры
       
-      // Сразу обновляем прогресс в SharedPreferences
+      // Сохраняем прогресс (твой оригинальный код)
       if (_currentLevel == 1) {
         _maxProgress = 100; _prefs.setInt('cybics_max_progress', 100);
       } else if (_currentLevel == 2) {
@@ -861,7 +902,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       }
       _stopAllLevelTracks();
 
-      // ОБНОВЛЕНИЕ: Просто показываем экран победы и ждем действий игрока
       if (mounted) {
         setState(() { _showVictory = true; });
       }
