@@ -473,13 +473,15 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         }
       }
     }
-    else if (_currentLevel == 4) {
+        else if (_currentLevel == 4) {
       int seed = 4444; 
       int invertedSeed = 8585;
       _orbs.clear();
       double portalInX = _levelLength * 0.35;
+      double portalOutX = _levelLength * 0.70; // Конец зоны инверсии (70%)
+      bool safeGapSpawned = false; // Флаг для создания безопасной дистанции
 
-            while (nextX < _levelLength - 1000) {
+      while (nextX < _levelLength - 1000) {
         double progressPct = (nextX / _levelLength) * 100;
         bool isGravityZone = progressPct >= 35 && progressPct <= 70;
 
@@ -490,39 +492,38 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             continue;
           }
 
-                    // Используем сид для честного псевдорандома внутри инверсии
           double rMode = _seededRandom(invertedSeed++);
 
           if (rMode < 0.33) {
-            // ЛОВУШКА 1: Твои каскадные платформы (для передышки)
             _obstacles.add(Obstacle(type: 'platform', x: nextX, y: 80, w: 180, h: 60));
             _obstacles.add(Obstacle(type: 'platform', x: nextX + 240, y: 120, w: 180, h: 60)); 
             _obstacles.add(Obstacle(type: 'platform', x: nextX + 480, y: 160, w: 180, h: 60)); 
             nextX += 720;
           } 
-                              else if (rMode < 0.66) {
-            // ЛОВУШКА 2: Теперь ровно 3 шипа сплошным рядом на платформе в инверсии
+          else if (rMode < 0.66) {
             _obstacles.add(Obstacle(type: 'platform', x: nextX, y: 100, w: 300, h: 60));
             _obstacles.add(Obstacle(type: 'spike', x: nextX + 95, y: 160));
-            _obstacles.add(Obstacle(type: 'spike', x: nextX + 125, y: 160)); // 3 шипа вплотную
+            _obstacles.add(Obstacle(type: 'spike', x: nextX + 125, y: 160)); 
             _obstacles.add(Obstacle(type: 'spike', x: nextX + 155, y: 160));
             nextX += 500;
           }   
           else {
-            // ЛОВУШКА 3: Две платформы с большим расстоянием и парящей сферой между ними
-            // Первая платформа
             _obstacles.add(Obstacle(type: 'platform', x: nextX, y: 100, w: 150, h: 60));
-            
-            // Парящая сфера ровно посредине пропасти (на X: +265, по высоте Y: 220 ближе к центру)
             _orbs.add(GameOrb(x: nextX + 265, y: 220, collected: false));
-            
-            // Вторая платформа после пропасти в 230 пикселей
             _obstacles.add(Obstacle(type: 'platform', x: nextX + 380, y: 100, w: 150, h: 60));
             nextX += 650;
           }
-
-
         } else {
+          // ==========================================
+          // ИСПРАВЛЕНИЕ: БЕЗОПАСНЫЙ ЗАЗОР ПОСЛЕ ИНВЕРСИИ
+          // ==========================================
+          // Если мы только что вышли из зоны инверсии и еще не делали отступ
+          if (progressPct > 70 && !safeGapSpawned) {
+            nextX = portalOutX + 600; // Сдвигаем генерацию первого препятствия на 600px вперед
+            safeGapSpawned = true; // Фиксируем, что зазор создан
+            continue; // Переходим к следующему шагу цикла без спавна препятствий
+          }
+
           // --- НАЗЕМНЫЕ ПРЕПЯТСТВИЯ С ОБЯЗАТЕЛЬНЫМИ СФЕРАМИ (ОРБАМИ) ---
           double r = _seededRandom(seed++);
           if (r < 0.35) {
@@ -555,7 +556,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           }
         }
       }
-      }
+    }
     }
   
 
