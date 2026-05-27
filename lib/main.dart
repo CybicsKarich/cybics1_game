@@ -720,8 +720,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     }
   }
 
-
-
     void _updatePhysics() {
     _player.x += 7.5;
     _cameraX = _player.x - 200;
@@ -838,11 +836,12 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       if (!_isGodMode) { _gameOver(); return; }
     }
 
-        // ==========================================
+            // ==========================================
     // ЭТАП 3: РАСЧЕТ КОЛЛИЗИЙ (ПЛАТФОРМЫ И ШИПЫ)
     // ==========================================
     _currentProgress = (progressPct.clamp(0, 100)).floor();
 
+    // Сбор секретных монет (медалей)
     if (_currentLevel != 4) {
       for (var m in _medals) {
         if (m.x < _player.x - 100 || m.x > _player.x + 200) continue;
@@ -858,8 +857,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     }
 
     for (var obs in _obstacles) {
-      // ИСПРАВЛЕНИЕ: Теперь учитываем полную ширину платформы (obs.x + obs.w), 
-      // чтобы длинные блоки не отсекались физикой раньше времени, пока игрок бежит по ним!
+      // Отсекаем объекты, которые далеко за пределами экрана (с учетом длины платформы)
       if (obs.x + (obs.type == 'platform' ? obs.w : 30) < _player.x - 150 || obs.x > _player.x + 900) continue;
 
       if (obs.type == 'spike') {
@@ -873,8 +871,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       else if (obs.type == 'platform') {
         bool stoodOnPlatform = false;
 
+        // Железобетонный захват поверхности блока
         if (_player.x + _player.size > obs.x + 2 && _player.x < obs.x + obs.w - 2) {
           if (_currentLevel == 4 && _isGravityInverted) {
+            // В инверсии ловим у потолка
             if (_player.vy <= 0 && _player.y <= obs.y + obs.h && _player.y >= obs.y + obs.h - 32) {
               _player.y = obs.y + obs.h;
               _player.vy = 0;
@@ -882,6 +882,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               stoodOnPlatform = true;
             }
           } else {
+            // Обычный режим (все уровни): ловим на поверхности блока
             if (_player.vy >= 0 && _player.y + _player.size >= obs.y && _player.y + _player.size <= obs.y + 32) {
               _player.y = obs.y - _player.size;
               _player.vy = 0;
@@ -893,6 +894,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
         if (stoodOnPlatform) continue;
 
+        // Честная смерть от удара в торец
         if (!_isGodMode) {
           if (_player.x + _player.size > obs.x && _player.x < obs.x + obs.w) {
             if (_player.y + _player.size > obs.y + 10 && _player.y < obs.y + obs.h - 10) {
@@ -920,21 +922,21 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       }
     }
 
-            // ==========================================
+    // ==========================================
     // ЭТАП 4: ЛОГИКА ФИНАЛЬНОГО ПОРТАЛА И ИСКР
     // ==========================================
-    double portalTargetY = _floorY - 150; // Центр твоего овального портала
+    double portalTargetY = _floorY - 150; // Центр овального портала
 
-    // 1. ГЕНЕРАЦИЯ ИСКР: если игрок приблизился к финишу (за 1000 пикселей)
+    // Генерируем зеленые искры из портала, если игрок приблизился к финишу
     if (_player.x >= _levelLength - 1000 && _player.x < _levelLength + 300) {
       var rand = math.Random();
-      if (rand.nextDouble() < 0.4) { // Спавним искры порциями для плавности
+      if (rand.nextDouble() < 0.4) {
         double pAngle = rand.nextDouble() * math.pi * 2;
         double pSpeed = 1 + rand.nextDouble() * 3;
         _portalParticles.add(DeathParticle(
           x: _levelLength + (rand.nextDouble() * 40 - 20),
           y: portalTargetY + (rand.nextDouble() * 160 - 80),
-          vx: -math.cos(pAngle).abs() * pSpeed - 2, // Левые вылетающие искры
+          vx: -math.cos(pAngle).abs() * pSpeed - 2, // Летят навстречу игроку
           vy: math.sin(pAngle) * pSpeed,
           size: 4 + rand.nextDouble() * 4,
           alpha: 1.0,
@@ -942,23 +944,20 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       }
     }
 
-    // 2. ДВИЖЕНИЕ ИСКР: обновляем их координаты каждый кадр
+    // Физика движения искр финиша
     for (int i = _portalParticles.length - 1; i >= 0; i--) {
       var p = _portalParticles[i];
       p.x += p.vx;
       p.y += p.vy;
-      p.alpha -= 0.02; // Плавное затухание
-      if (p.alpha <= 0) {
-        _portalParticles.removeAt(i);
-      }
+      p.alpha -= 0.02;
+      if (p.alpha <= 0) _portalParticles.removeAt(i);
     }
 
-    // 3. АВТОЗАТЯГИВАНИЕ: Если игрок подлетает к порталу ближе чем на 250px
+    // АВТОЗАТЯГИВАНИЕ: Если игрок подлетает к порталу ближе чем на 250px
     if (_player.x >= _levelLength - 250 && _isPlaying) {
       _player.vy = 0;
       _player.isGrounded = false;
-      // Плавно притягиваем координату Y кубика к центру портала (эффект магнита)
-      _player.y += (portalTargetY - (_player.y + _player.size / 2)) * 0.12;
+      _player.y += (portalTargetY - (_player.y + _player.size / 2)) * 0.12; // Плавный магнит в центр
     }
 
     // ==========================================
@@ -969,14 +968,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       _isPlaying = false;
       _portalParticles.clear(); // Убираем искры
       
-      // ИСПРАВЛЕНИЕ: Динамическое сохранение рекорда и собранных медалей
+      // Динамическое сохранение рекорда и собранных медалей
       if (_currentLevel == 1) {
         _maxProgress = 100; 
         _prefs.setInt('cybics_max_progress', 100);
       } else if (_currentLevel == 2) {
         _maxProgress2 = 100; 
         _prefs.setInt('cybics_max_progress_2', 100);
-        // Запись только тех медалей, которые собрали (Максимум 2 медали для 2 уровня)
         for (var id in _collectedThisRun) {
           if (id < _savedMedals2.length) _savedMedals2[id] = true;
         }
@@ -1006,7 +1004,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       }
     }
   } // Конец метода _updatePhysics
-}
+
  
   void _gameOver() {
     _gameTimer?.cancel();
