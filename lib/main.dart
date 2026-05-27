@@ -474,11 +474,11 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         }
       }
     }
-                else if (_currentLevel == 4) {
+        else if (_currentLevel == 4) {
       int seed = 4444; 
       int invertedSeed = 8585;
       _orbs.clear();
-      _medals.clear(); 
+      _medals.clear(); // Разрешаем медали
       double portalInX = _levelLength * 0.35;
       double portalOutX = _levelLength * 0.70; 
       bool safeGapSpawned = false;
@@ -499,22 +499,30 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             continue;
           }
 
+          // МЕДАЛЬ №2 (50%): УВЕЛИЧЕННАЯ ПЛАТФОРМА, СФЕРА СТРОГО В СЕРЕДИНЕ НАД ШИПАМИ
           if (progressPct >= 50.0 && !spawnedMedal2Obstacle) {
             double platX = nextX;
             double platY = 100;
-            _obstacles.add(Obstacle(type: 'platform', x: platX, y: platY, w: 300, h: 60));
-            _obstacles.add(Obstacle(type: 'spike', x: platX + 95, y: 160));
-            _obstacles.add(Obstacle(type: 'spike', x: platX + 125, y: 160)); 
-            _obstacles.add(Obstacle(type: 'spike', x: platX + 155, y: 160));
+            // Увеличили ширину платформы до 450, чтобы было больше места
+            _obstacles.add(Obstacle(type: 'platform', x: platX, y: platY, w: 450, h: 60));
+            
+            // Смещаем 3 шипа ближе к центру платформы
+            _obstacles.add(Obstacle(type: 'spike', x: platX + 170, y: 160));
+            _obstacles.add(Obstacle(type: 'spike', x: platX + 200, y: 160)); 
+            _obstacles.add(Obstacle(type: 'spike', x: platX + 230, y: 160));
 
-            _orbs.add(GameOrb(x: platX + 40, y: platY + 110, collected: false));
-            _medals.add(Medal(id: 1, x: platX + 140, y: platY + 195));
+            // Сфера установлена СТРОГО В СЕРЕДИНЕ над шипами (на X: +200)
+            _orbs.add(GameOrb(x: platX + 200, y: platY + 110, collected: false));
+            // Монетка на пике траектории прыжка вниз со сферы
+            _medals.add(Medal(id: 1, x: platX + 290, y: platY + 185));
 
-            nextX += 550;
+            // УМЕНЬШИЛИ РАССТОЯНИЕ: шаг вперед уменьшен, чтобы игрок легко допрыгивал до следующего блока
+            nextX += 200; 
             spawnedMedal2Obstacle = true;
             continue;
           }
 
+          // МЕДАЛЬ №3: Скрытая медаль на 67% в пропасти перед концом инверсии
           if (progressPct >= 66.5 && progressPct <= 68.5 && !spawnedMedal3Obstacle) {
             double m3X = nextX;
             _obstacles.add(Obstacle(type: 'platform', x: m3X, y: 100, w: 150, h: 60));
@@ -526,7 +534,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             _orbs.add(GameOrb(x: m3X + 265, y: 220, collected: false));
             _obstacles.add(Obstacle(type: 'platform', x: m3X + 380, y: 100, w: 150, h: 60));
             
-            nextX += 650;
+            nextX += 200; // Тоже уменьшили расстояние для безопасности выхода из зоны
             spawnedMedal3Obstacle = true;
             continue;
           }
@@ -558,26 +566,25 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             continue;
           }
 
-          // ИСПРАВЛЕНИЕ МЕДАЛИ №1 (28%): Сфера НАД шипами, монетка ВЫШЕ и ПРАВЕЕ сферы, 
-          // а расстояние до следующей потолочной платформы сокращено для проходимости!
+          // МЕДАЛЬ №1 (28%): СФЕРА НАД ШИПАМИ, МОНЕТКА ПРАВЕЕ ШИПОВ И ВЫШЕ СФЕРЫ
           if (progressPct >= 27.5 && progressPct <= 29.5 && !spawnedMedal1Obstacle) {
             double startX = nextX;
+            double platW = 210;
             
-            // Строим подвесную длинную платформу с шипами
-            _obstacles.add(Obstacle(type: 'platform', x: startX, y: _floorY - 80, w: 210, h: 80));
+            // Подвесная платформа с шипами
+            _obstacles.add(Obstacle(type: 'platform', x: startX, y: _floorY - 80, w: platW, h: 80));
             for (int i = 0; i < 7; i++) {
               _obstacles.add(Obstacle(type: 'spike', x: startX + (i * 30), y: _floorY - 80));
             }
             
-            // Сфера активации расположена строго НАД шипами посередине
+            // Сфера висит строго НАД шипами (по центру платформы: 210 / 2 = 105)
             _orbs.add(GameOrb(x: startX + 105, y: _floorY - 170, collected: false));
             
-            // Секретная монетка висит правее шипов и выше сферы в идеальной точке прыжка
-            _medals.add(Medal(id: 0, x: startX + 190, y: _floorY - 240));
+            // Монетка находится ПРАВЕЕ шипов (за пределами платформы: +240) и ВЫШЕ сферы (Y: -230)
+            _medals.add(Medal(id: 0, x: startX + 240, y: _floorY - 230));
             
-            // СОКРАЩЕНИЕ ДИСТАНЦИИ: Сдвигаем следующую точку генерации ближе (с 550 до 380),
-            // чтобы игрок не летел в затяжную смертельную пропасть и мог продолжить уровень!
-            nextX += 380; 
+            // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Сократили расстояние до следующего препятствия (всего 200 пикселей после платформы)
+            nextX += platW + 200; 
             spawnedMedal1Obstacle = true;
             continue;
           }
@@ -1010,6 +1017,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   void _gameOver() {
     _gameTimer?.cancel();
     _retryTimer?.cancel(); // ИСПРАВЛЕНИЕ: Сбрасываем старый таймер ретрая
+    _collectedThisRun.clear();
     _playDeathSound();
     bool isNewRecord = false;
 
