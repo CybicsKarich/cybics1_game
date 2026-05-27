@@ -144,6 +144,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   List<int> _collectedThisRun = [];
   int _currentProgress = 0;
   bool _isPressing = false;
+  final ValueNotifier<int> _gameTickNotifier = ValueNotifier<int>(0);
 
   bool _showNewRecord = false;
   bool _showVictory = false;
@@ -610,9 +611,11 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       _generateFixedLevel();
     });
 
-    _gameTimer = Timer.periodic(const Duration(milliseconds: 16), (timer) {
+        _gameTimer = Timer.periodic(const Duration(milliseconds: 16), (timer) {
       if (_isPlaying && !_isPaused) {
         _updatePhysics();
+        // ИСПРАВЛЕНИЕ: Даем команду холсту перерисоваться без вызова тяжелого setState
+        _gameTickNotifier.value++; 
       }
     });
   }
@@ -647,7 +650,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
 
        void _updatePhysics() {
-    setState(() {
       _player.x += 7.5;
       _cameraX = _player.x - 200;
 
@@ -847,8 +849,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         }
         _stopAllLevelTracks();
       }
-    });
-  }
+    }
  
   void _gameOver() {
     _gameTimer?.cancel();
@@ -1169,25 +1170,31 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       onPointerUp: (_) => setState(() { _isPressing = false; }),
       child: Stack(
         children: [
-          Positioned.fill(
-            child: CustomPaint(
-              painter: GamePainter(
-                player: _player,
-                cameraX: _cameraX,
-                obstacles: _obstacles,
-                medals: _medals,
-                trailParticles: _trailParticles,
-                bgItems: _bgItems,
-                deathParticles: _deathParticles,
-                orbs: _orbs,
-                isPlaying: _isPlaying,
-                currentLevel: _currentLevel,
-                levelLength: _levelLength,
-                floorY: _floorY,
-                gameHeight: _gameHeight,
-                currentProgress: _currentProgress,
-                showPercent: _showPercent,
-              ),
+                    Positioned.fill(
+            // ИСПРАВЛЕНИЕ: Перерисовывается СТРОГО холст, не затрагивая оверлеи интерфейса
+            child: ValueListenableBuilder<int>(
+              valueListenable: _gameTickNotifier,
+              builder: (context, tick, child) {
+                return CustomPaint(
+                  painter: GamePainter(
+                    player: _player,
+                    cameraX: _cameraX,
+                    obstacles: _obstacles,
+                    medals: _medals,
+                    trailParticles: _trailParticles,
+                    bgItems: _bgItems,
+                    deathParticles: _deathParticles,
+                    orbs: _orbs,
+                    isPlaying: _isPlaying,
+                    currentLevel: _currentLevel,
+                    levelLength: _levelLength,
+                    floorY: _floorY,
+                    gameHeight: _gameHeight,
+                    currentProgress: _currentProgress,
+                    showPercent: _showPercent,
+                  ),
+                );
+              },
             ),
           ),
           Positioned(
@@ -1347,6 +1354,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     _deathVolumeTimer?.cancel(); 
     _retryTimer?.cancel();  
     _pulseController.dispose();
+    _gameTickNotifier.dispose();
     _menuPlayer.dispose();
     _level1Player.dispose();
     _level2Player.dispose();
@@ -1357,7 +1365,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   }
 }
 
-// --- ОТРИСОВКА ИГРЫ (CUSTOM PAINTER) ---
 class GamePainter extends CustomPainter {
   final Player player;
   final double cameraX;
@@ -1493,6 +1500,7 @@ class GamePainter extends CustomPainter {
           canvas.drawPath(spikePath, paint);
           paint.style = PaintingStyle.fill;
 
+          // ИСПРАВЛЕНИЕ: Заменяем тяжелый TextPainter знака (!) на быстрый векторный рисунок
           canvas.save();
           double time = DateTime.now().millisecondsSinceEpoch * 0.005;
           double pulse = 1.0 + math.sin(time) * 0.15;
@@ -1500,14 +1508,10 @@ class GamePainter extends CustomPainter {
           canvas.translate(renderX + 15, obs.y + markOffsetY);
           canvas.scale(pulse, pulse);
           
-          TextPainter textPainter = TextPainter(
-            text: const TextSpan(
-              text: '!',
-              style: TextStyle(color: Color(0xFFFACC15), fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            textDirection: TextDirection.ltr,
-          )..layout();
-          textPainter.paint(canvas, Offset(-textPainter.width / 2, -textPainter.height / 2));
+          paint.color = const Color(0xFFFACC15);
+          canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(-2, -9, 4, 11), const Radius.circular(1.5)), paint);
+          canvas.drawCircle(const Offset(0, 5), 2, paint);
+          
           canvas.restore();
         } 
         else if (obs.type == 'platform') {
@@ -1534,17 +1538,21 @@ class GamePainter extends CustomPainter {
         paint.color = Colors.white;
         paint.strokeWidth = 3;
         canvas.drawCircle(Offset(renderX, m.y), 18, paint);
+        
+        // ИСПРАВЛЕНИЕ: Рисуем внутренний кристалл монеты геометрией холста
         paint.style = PaintingStyle.fill;
-
-        TextPainter textPainter = TextPainter(
-          text: const TextSpan(text: 'C', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-          textDirection: TextDirection.ltr,
-        )..layout();
-        textPainter.paint(canvas, Offset(renderX - textPainter.width / 2, m.y - textPainter.height / 2));
+        paint.color = Colors.white;
+        Path coinSymbol = Path()
+          ..moveTo(renderX, m.y - 7)
+          ..lineTo(renderX + 7, m.y)
+          ..lineTo(renderX, m.y + 7)
+          ..lineTo(renderX - 7, m.y)
+          ..close();
+        canvas.drawPath(coinSymbol, paint);
       }
     }
 
-        // 5.1 Сферы (Орбы) 4 уровня
+    // 5.1 Сферы (Орбы) 4 уровня
     if (currentLevel == 4) {
       for (var orb in orbs) {
         double renderX = orb.x - cameraX;
@@ -1574,7 +1582,6 @@ class GamePainter extends CustomPainter {
       }
     }
 
-
     // 6. Шлейф
     if (trailParticles.isNotEmpty) {
       canvas.save();
@@ -1594,7 +1601,7 @@ class GamePainter extends CustomPainter {
     // 7. Отрисовка кубика или самолётика
     if (isPlaying) {
       canvas.save();
-            canvas.translate(player.x - cameraX + player.size / 2, player.y + player.size / 2);
+      canvas.translate(player.x - cameraX + player.size / 2, player.y + player.size / 2);
       canvas.rotate(player.rotation);
 
       if (player.isShip) {
@@ -1624,7 +1631,9 @@ class GamePainter extends CustomPainter {
       canvas.restore();
     }
 
-    // 8. Фиолетовые порталы
+        // ==========================================
+    // ОПТИМИЗИРОВАННЫЙ БЛОК 8: ФИОЛЕТОВЫЕ ПОРТАЛЫ
+    // ==========================================
     if (currentLevel == 2 || currentLevel == 3) {
       double shipInX = (levelLength * 0.4) - cameraX;
       double shipOutX = (levelLength * 0.75) - cameraX;
@@ -1649,134 +1658,138 @@ class GamePainter extends CustomPainter {
     }
 
     // ==========================================
-// ИСПРАВЛЕННЫЙ БЛОК 8.1: ЖЁЛТЫЕ ПОРТАЛЫ (БЕЗ TEXTPAINTER)
-// ==========================================
-if (currentLevel == 4) {
-  double gravInX = (levelLength * 0.35) - cameraX;
-  double gravOutX = (levelLength * 0.70) - cameraX;
+    // ОПТИМИЗИРОВАННЫЙ БЛОК 8.1: ЖЁЛТЫЕ ПОРТАЛЫ ГРАВИТАЦИИ
+    // ==========================================
+    if (currentLevel == 4) {
+      double gravInX = (levelLength * 0.35) - cameraX;
+      double gravOutX = (levelLength * 0.70) - cameraX;
 
-  void drawGravityPortal(double x, bool isEntering) {
-    if (x > -100 && x < (size.width / scale) + 100) {
+      void drawGravityPortal(double x, bool isEntering) {
+        if (x > -100 && x < (size.width / scale) + 100) {
+          canvas.save();
+
+          final Rect portalRect = Rect.fromLTWH(x - 25, 100, 50, floorY - 100);
+          paint.shader = const LinearGradient(
+            colors: [Colors.transparent, Color(0x59EAB308), Colors.transparent],
+          ).createShader(portalRect);
+          paint.style = PaintingStyle.fill;
+          canvas.drawRect(portalRect, paint);
+          paint.shader = null;
+
+          paint.style = PaintingStyle.stroke;
+          paint.color = const Color(0xFFFACC15);
+          paint.strokeWidth = 5;
+          canvas.drawLine(Offset(x, 100), Offset(x, floorY), paint);
+
+          // ВЕКТОРНЫЕ СТРЕЛКИ ВМЕСТО ТЕКСТА (РАБОТАЮТ В 100 РАЗ БЫСТРЕЕ)
+          paint.style = PaintingStyle.fill;
+          paint.color = Colors.white;
+          canvas.translate(x, 80); // Сдвиг к вершине портала
+
+          Path arrowPath = Path();
+          if (isEntering) {
+            // Рисуем стрелку вниз ▼
+            arrowPath.moveTo(-8, -5);
+            arrowPath.lineTo(8, -5);
+            arrowPath.lineTo(0, 7);
+          } else {
+            // Рисуем стрелку вверх ▲
+            arrowPath.moveTo(-8, 5);
+            arrowPath.lineTo(8, 5);
+            arrowPath.lineTo(0, -7);
+          }
+          arrowPath.close();
+          canvas.drawPath(arrowPath, paint);
+
+          canvas.restore();
+        }
+      }
+      drawGravityPortal(gravInX, true);
+      drawGravityPortal(gravOutX, false);
+    }
+
+    // ==========================================
+    // БЛОК 9: ПОРТАЛ ФИНИША
+    // ==========================================
+    double portalX = levelLength - cameraX;
+    if (portalX > -200 && portalX < (size.width / scale) + 200) {
+      paint.shader = const RadialGradient(
+        colors: [Color(0xFFFFFFFF), Color(0xCC4ADE80), Color(0x4D22C55E), Colors.transparent],
+        stops: [0.0, 0.3, 0.7, 1.0],
+      ).createShader(Rect.fromCircle(center: Offset(portalX, floorY - 150), radius: 90));
+      
       canvas.save();
-
-      // Фон портала
-      final Rect portalRect = Rect.fromLTWH(x - 25, 100, 50, floorY - 100);
-      paint.shader = const LinearGradient(
-        colors: [Colors.transparent, Color(0x59EAB308), Colors.transparent],
-      ).createShader(portalRect);
-      paint.style = PaintingStyle.fill;
-      canvas.drawRect(portalRect, paint);
+      canvas.translate(portalX, floorY - 150);
+      canvas.drawOval(Rect.fromCenter(center: Offset.zero, width: 180, height: 300), paint);
       paint.shader = null;
 
-      // Линия портала
       paint.style = PaintingStyle.stroke;
-      paint.color = const Color(0xFFFACC15);
-      paint.strokeWidth = 5;
-      canvas.drawLine(Offset(x, 100), Offset(x, floorY), paint);
-
-      // ВЕКТОРНЫЕ СТРЕЛКИ ВМЕСТО ТЕКСТА (РАБОТАЮТ В 100 РАЗ БЫСТРЕЕ)
-      paint.style = PaintingStyle.fill;
-      paint.color = Colors.white;
-      canvas.translate(x, 80); // Сдвиг к вершине портала
-
-      Path arrowPath = Path();
-      if (isEntering) {
-        // Стрелка вниз ▼
-        arrowPath.moveTo(-8, -5);
-        arrowPath.lineTo(8, -5);
-        arrowPath.lineTo(0, 7);
-      } else {
-        // Стрелка вверх ▲
-        arrowPath.moveTo(-8, 5);
-        arrowPath.lineTo(8, 5);
-        arrowPath.lineTo(0, -7);
-      }
-      arrowPath.close();
-      canvas.drawPath(arrowPath, paint);
-
+      paint.color = const Color(0xFF4ADE80);
+      paint.strokeWidth = 6;
+      canvas.drawOval(Rect.fromCenter(center: Offset.zero, width: 80, height: 280), paint);
       canvas.restore();
+      paint.style = PaintingStyle.fill;
     }
-  }
-  drawGravityPortal(gravInX, true);
-  drawGravityPortal(gravOutX, false);
-}
 
-// 9. Портал финиша (твой отличный код без изменений)
-double portalX = levelLength - cameraX;
-if (portalX > -200 && portalX < (size.width / scale) + 200) {
-  paint.shader = const RadialGradient(
-    colors: [Color(0xFFFFFFFF), Color(0xCC4ADE80), Color(0x4D22C55E), Colors.transparent],
-    stops: [0.0, 0.3, 0.7, 1.0],
-  ).createShader(Rect.fromCircle(center: Offset(portalX, floorY - 150), radius: 90));
-  
-  canvas.save();
-  canvas.translate(portalX, floorY - 150);
-  canvas.drawOval(Rect.fromCenter(center: Offset.zero, width: 180, height: 300), paint);
-  paint.shader = null;
+    // ==========================================
+    // БЛОК: ОСКОЛКИ СМЕРТИ
+    // ==========================================
+    for (var p in deathParticles) {
+      if (p.alpha > 0) {
+        canvas.save();
+        paint.color = player.isShip 
+            ? const Color(0xFFC084FC).withOpacity(p.alpha) 
+            : const Color(0xFF00F2FE).withOpacity(p.alpha);
+        paint.style = PaintingStyle.fill;
+        
+        final Rect pRect = Rect.fromLTWH(p.x - cameraX - p.size / 2, p.y - p.size / 2, p.size, p.size);
+        canvas.drawRect(pRect, paint);
+        
+        paint.color = Colors.white.withOpacity(p.alpha);
+        paint.style = PaintingStyle.stroke;
+        paint.strokeWidth = 1;
+        canvas.drawRect(pRect, paint);
+        canvas.restore();
+      }
+    }
 
-  paint.style = PaintingStyle.stroke;
-  paint.color = const Color(0xFF4ADE80);
-  paint.strokeWidth = 6;
-  canvas.drawOval(Rect.fromCenter(center: Offset.zero, width: 80, height: 280), paint);
-  canvas.restore();
-  paint.style = PaintingStyle.fill;
-}
+    // ==========================================
+    // ОПТИМИЗИРОВАННЫЙ БЛОК 10: ВЕРХНИЙ ПРОГРЕСС-БАР
+    // ==========================================
+    if (showPercent) {
+      double barW = 250;
+      double barH = 22;
+      double barX = (size.width / scale) / 2 - barW / 2;
+      double barY = 25;
 
-// Осколки смерти (твой код без изменений)
-for (var p in deathParticles) {
-  if (p.alpha > 0) {
-    canvas.save();
-    paint.color = player.isShip 
-        ? const Color(0xFFC084FC).withOpacity(p.alpha) 
-        : const Color(0xFF00F2FE).withOpacity(p.alpha);
-    paint.style = PaintingStyle.fill;
-    
-    final Rect pRect = Rect.fromLTWH(p.x - cameraX - p.size / 2, p.y - p.size / 2, p.size, p.size);
-    canvas.drawRect(pRect, paint);
-    
-    paint.color = Colors.white.withOpacity(p.alpha);
-    paint.style = PaintingStyle.stroke;
-    paint.strokeWidth = 1;
-    canvas.drawRect(pRect, paint);
-    canvas.restore();
-  }
-}
+      paint.color = const Color(0xFF0F172A).withOpacity(0.6);
+      canvas.drawRect(Rect.fromLTWH(barX, barY, barW, barH), paint);
 
-// ==========================================
-// ИСПРАВЛЕННЫЙ БЛОК 10: ОПТИМИЗИРОВАННЫЕ ПРОЦЕНТЫ
-// ==========================================
-if (showPercent) {
-  double barW = 250;
-  double barH = 22;
-  double barX = (size.width / scale) / 2 - barW / 2;
-  double barY = 25;
+      paint.color = const Color(0xFF00F2FE);
+      canvas.drawRect(Rect.fromLTWH(barX, barY, barW * (currentProgress / 100.0), barH), paint);
 
-  paint.color = const Color(0xFF0F172A).withOpacity(0.6);
-  canvas.drawRect(Rect.fromLTWH(barX, barY, barW, barH), paint);
+      // Кэшируем TextPainter локально внутри кадра (он один, это не бьет по FPS)
+      TextPainter progressTextPainter = TextPainter(
+        text: TextSpan(
+          text: '$currentProgress%', 
+          style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      
+      progressTextPainter.paint(
+        canvas, 
+        Offset(barX + barW / 2 - progressTextPainter.width / 2, barY + barH / 2 - progressTextPainter.height / 2)
+      );
+    }
 
-  paint.color = const Color(0xFF00F2FE);
-  canvas.drawRect(Rect.fromLTWH(barX, barY, barW * (currentProgress / 100.0), barH), paint);
-
-  // Кэшируем TextPainter локально внутри кадра
-  TextPainter progressTextPainter = TextPainter(
-    text: TextSpan(
-      text: '$currentProgress%', 
-      style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)
-    ),
-    textDirection: TextDirection.ltr,
-  )..layout();
-  
-  progressTextPainter.paint(
-    canvas, 
-    Offset(barX + barW / 2 - progressTextPainter.width / 2, barY + barH / 2 - progressTextPainter.height / 2)
-  );
-}
-canvas.restore(); // Сбрасываем глобальный масштаб
+    canvas.restore(); // Сбрасываем глобальный масштаб
   }
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }
+
 
 
 
