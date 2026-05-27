@@ -1004,7 +1004,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       }
     }
   } // Конец метода _updatePhysics
-
+}
+}
  
   void _gameOver() {
     _gameTimer?.cancel();
