@@ -478,7 +478,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       int seed = 4444; 
       int invertedSeed = 8585;
       _orbs.clear();
-      _medals.clear(); // Разрешаем медали на 4 уровне
+      _medals.clear(); 
       double portalInX = _levelLength * 0.35;
       double portalOutX = _levelLength * 0.70; 
       bool safeGapSpawned = false;
@@ -499,27 +499,27 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             continue;
           }
 
-          // МЕДАЛЬ №2 (50%): ОДИН РЯД ШИПОВ, СФЕРА В СЕРЕДИНЕ, МОНЕТКА ВЫШЕ И ПРАВЕЕ
+          // МЕДАЛЬ №2 (50%): НОРМАЛЬНЫЕ 3 ШИПА И ПОДНЯТАЯ МОНЕТКА
           if (progressPct >= 50.0 && !spawnedMedal2Obstacle) {
             double platX = nextX;
             double platY = 100;
+            double platW = 500; // Большая устойчивая платформа
             
-            // Большая платформа под потолком
-            _obstacles.add(Obstacle(type: 'platform', x: platX, y: platY, w: 450, h: 60));
+            _obstacles.add(Obstacle(type: 'platform', x: platX, y: platY, w: platW, h: 60));
             
-            // Ровно ОДИН ряд из 3 шипов по центру платформы (450 / 2 = 225)
-            _obstacles.add(Obstacle(type: 'spike', x: platX + 210, y: 160));
-            _obstacles.add(Obstacle(type: 'spike', x: platX + 225, y: 160)); 
-            _obstacles.add(Obstacle(type: 'spike', x: platX + 240, y: 160));
+            // ЧЕСТНЫЕ 3 ШИПА (расстояние между ними ровно 30 пикселей)
+            _obstacles.add(Obstacle(type: 'spike', x: platX + 220, y: 160));
+            _obstacles.add(Obstacle(type: 'spike', x: platX + 250, y: 160)); 
+            _obstacles.add(Obstacle(type: 'spike', x: platX + 280, y: 160));
 
-            // Сфера висит СТРОГО в середине над этими шипами
-            _orbs.add(GameOrb(x: platX + 225, y: platY + 110, collected: false));
+            // Сфера висит строго в середине над центральным шипом
+            _orbs.add(GameOrb(x: platX + 250, y: platY + 110, collected: false));
             
-            // Монетка расположена чуть ВЫШЕ и ПРАВЕЕ сферы (в инверсии прыжок идет вниз, поэтому Y смещаем ниже к полу)
-            _medals.add(Medal(id: 1, x: platX + 310, y: platY + 150));
+            // ИСПРАВЛЕНИЕ: Подняли медаль повыше (сместили Y ближе к полу: 210 вместо 150)
+            _medals.add(Medal(id: 1, x: platX + 340, y: platY + 210));
 
-            // Сокращенное расстояние до следующего блока
-            nextX += 450 + 200; 
+            // Корректный сдвиг камеры (длина платформы + короткий зазор в 150px)
+            nextX += platW + 150; 
             spawnedMedal2Obstacle = true;
             continue;
           }
@@ -536,7 +536,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             _orbs.add(GameOrb(x: m3X + 265, y: 220, collected: false));
             _obstacles.add(Obstacle(type: 'platform', x: m3X + 380, y: 100, w: 150, h: 60));
             
-            nextX += 150 + 200; 
+            nextX += 150 + 380 + 150; 
             spawnedMedal3Obstacle = true;
             continue;
           }
@@ -568,25 +568,20 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             continue;
           }
 
-          // МЕДАЛЬ №1 (28%): ГАРАНТИРОВАННОЕ СОЗДАНИЕ ПЕРВОЙ МОНЕТЫ
+          // МЕДАЛЬ №1 (28%): ГАРАНТИРОВАННАЯ ПЕРВАЯ МОНЕТКА УРОВНЯ
           if (progressPct >= 27.5 && progressPct <= 29.5 && !spawnedMedal1Obstacle) {
             double startX = nextX;
             double platW = 210;
             
-            // Подвесная платформа с шипами
             _obstacles.add(Obstacle(type: 'platform', x: startX, y: _floorY - 80, w: platW, h: 80));
             for (int i = 0; i < 7; i++) {
               _obstacles.add(Obstacle(type: 'spike', x: startX + (i * 30), y: _floorY - 80));
             }
             
-            // Сфера висит строго НАД шипами по центру платформы (210 / 2 = 105)
             _orbs.add(GameOrb(x: startX + 105, y: _floorY - 170, collected: false));
+            _medals.add(Medal(id: 0, x: startX + 240, y: _floorY - 230)); // ID: 0 — честная первая медаль!
             
-            // Монетка находится ПРАВЕЕ шипов и ВЫШЕ сферы (ID: 0 - первая монета уровня!)
-            _medals.add(Medal(id: 0, x: startX + 240, y: _floorY - 240));
-            
-            // Сократили расстояние после платформы до 200 пикселей
-            nextX += platW + 200; 
+            nextX += platW + 150; 
             spawnedMedal1Obstacle = true;
             continue;
           }
