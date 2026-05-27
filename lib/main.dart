@@ -686,7 +686,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       bool isAutoFlying = _isGravityInverted && (_player.x < portalInX + 600);
 
       if (_isPressing && _player.isGrounded && !isAutoFlying) {
-        _player.vy = _isGravityInverted ? 12.0 : _player.jumpForce;
+        _player.vy = _isGravityInverted ? 20.0 : _player.jumpForce;
         _player.isGrounded = false;
       }
     } else {
@@ -715,8 +715,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           _player.isGrounded = true;
         }
       } else if (_isGravityInverted) {
-        _player.vy -= 1.1;
-        if (_player.vy < -13) _player.vy = -13;
+        _player.vy -= 1.5; 
+          if (_player.vy < -15) _player.vy = -15;;
         _player.y += _player.vy;
         if (_player.y <= 30 && !wasGrounded && !_isGodMode) { _gameOver(); return; }
       } else {
