@@ -143,6 +143,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   List<GameOrb> _orbs = [];
   double _orbSpinAngle = 0;
   bool _isGravityInverted = false;
+  final List<DeathParticle> _portalParticles = [];
   List<int> _collectedThisRun = [];
   int _currentProgress = 0;
   bool _isPressing = false;
@@ -592,6 +593,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       _orbs.clear();
       _orbSpinAngle = 0;
       _isGravityInverted = false;
+      _portalParticles.clear();
 
       _player = Player()
         ..y = _floorY - 40
@@ -837,12 +839,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       }
     }
 
-    // Проверка финиша уровня
+        // Проверка финиша уровня
     if (_player.x >= _levelLength) {
       _gameTimer?.cancel();
       _isPlaying = false;
-      _showVictory = true;
+      _portalParticles.clear(); // Очищаем искры портала
       
+      // Сразу обновляем прогресс в SharedPreferences
       if (_currentLevel == 1) {
         _maxProgress = 100; _prefs.setInt('cybics_max_progress', 100);
       } else if (_currentLevel == 2) {
@@ -857,8 +860,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         _maxProgress4 = 100; _prefs.setInt('cybics_max_progress_4', 100);
       }
       _stopAllLevelTracks();
+
+      // ОБНОВЛЕНИЕ: Просто показываем экран победы и ждем действий игрока
+      if (mounted) {
+        setState(() { _showVictory = true; });
+      }
     }
-  }
+   }
 
  
   void _gameOver() {
@@ -1194,6 +1202,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                     trailParticles: _trailParticles,
                     bgItems: _bgItems,
                     deathParticles: _deathParticles,
+                    portalParticles: _portalParticles,
                     orbs: _orbs,
                     isPlaying: _isPlaying,
                     currentLevel: _currentLevel,
@@ -1305,17 +1314,24 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildVictoryOverlay() {
+    Widget _buildVictoryOverlay() {
     return Container(
       color: Colors.black.withOpacity(0.9),
       child: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Text('УРОВЕНЬ ПРОЙДЕН!', style: TextStyle(fontSize: 54, fontWeight: FontWeight.w900, color: Color(0xFF22C55E), letterSpacing: 4)),
+            const Text(
+              'УРОВЕНЬ ПРОЙДЕН!', 
+              style: TextStyle(fontSize: 54, fontWeight: FontWeight.w900, color: Color(0xFF22C55E), letterSpacing: 4)
+            ),
             const SizedBox(height: 10),
-            const Text('Новый рекорд: 100%', style: TextStyle(fontSize: 24, color: Colors.white70)),
+            const Text(
+              'Новый рекорд: 100%', 
+              style: TextStyle(fontSize: 24, color: Colors.white70)
+            ),
             const SizedBox(height: 40),
+            // ИСПРАВЛЕНИЕ: Кнопка ручного закрытия экрана победы
             _buildBtn('ОК', () {
               setState(() {
                 _state = GameState.levelsMenu;
@@ -1328,6 +1344,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       ),
     );
   }
+
 
     Widget _buildBtn(String text, VoidCallback onPressed, {bool isSecondary = false, double minWidth = 250}) {
     return Container(
@@ -1383,6 +1400,7 @@ class GamePainter extends CustomPainter {
   final List<Offset> trailParticles;
   final List<BgItem> bgItems;
   final List<DeathParticle> deathParticles;
+  final List<DeathParticle> portalParticles;
   final List<GameOrb> orbs;
   final bool isPlaying;
   final int currentLevel;
@@ -1400,6 +1418,7 @@ class GamePainter extends CustomPainter {
     required this.trailParticles,
     required this.bgItems,
     required this.deathParticles,
+    required this.portalParticles,
     required this.orbs,
     required this.isPlaying,
     required this.currentLevel,
@@ -1766,6 +1785,19 @@ class GamePainter extends CustomPainter {
       paint.style = PaintingStyle.fill;
     }
 
+    for (var p in portalParticles) {
+      if (p.alpha > 0) {
+        canvas.save();
+        paint.color = const Color(0xFF4ADE80).withOpacity(p.alpha); // Неоново-зелёный цвет
+        paint.style = PaintingStyle.fill;
+        
+        // Рисуем искры в виде аккуратных овалов, летящих из портала
+        final Rect pRect = Rect.fromLTWH(p.x - cameraX - p.size / 2, p.y - p.size / 2, p.size, p.size);
+        canvas.drawOval(pRect, paint); 
+        canvas.restore();
+      }
+    }
+   
     // ==========================================
     // БЛОК: ОСКОЛКИ СМЕРТИ
     // ==========================================
