@@ -146,7 +146,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   List<int> _collectedThisRun = [];
   int _currentProgress = 0;
   bool _isPressing = false;
-  final ValueNotifier<int> _gameTickNotifier = ValueNotifier<int>(0);
 
   bool _showNewRecord = false;
   bool _showVictory = false;
