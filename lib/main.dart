@@ -617,7 +617,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
         _gameTimer = Timer.periodic(const Duration(milliseconds: 16), (timer) {
   if (_isPlaying && !_isPaused) {
-    _ysics(); // Считаем физику в фоне
+    _updatePhysics(); // Считаем физику в фоне
     _gameTickNotifier.value++; // Даем холсту сигнал: "пора рисовать"
   }
 });
