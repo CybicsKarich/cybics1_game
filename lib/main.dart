@@ -720,7 +720,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     }
   }
 
-    void _updatePhysics() {
+      void _updatePhysics() {
+    // ОПТИМИЗИРОВАННЫЙ СДВИГ: Расчеты идут напрямую в переменные
     _player.x += 7.5;
     _cameraX = _player.x - 200;
 
@@ -729,8 +730,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     // Определяем режим корабля (для уровней 2 и 3 в диапазоне 40%-75%)
     _player.isShip = (progressPct >= 40 && progressPct <= 75 && (_currentLevel == 2 || _currentLevel == 3));
 
-    // ИСПРАВЛЕНИЕ: Добавляем частицы шлейфа ВСЕГДА (и для куба, и для самолётика)
-    // Координата X установлена в _player.x (это задняя левая грань тела персонажа)
+    // ОБНОВЛЕНИЕ: Шлейф теперь работает и для кубика, и для самолётика
+    // Точка генерации смещена строго на заднюю (левую) грань персонажа
     _trailParticles.add(Offset(_player.x, _player.y + _player.size / 2));
     if (_trailParticles.length > 15) _trailParticles.removeAt(0);
 
@@ -742,7 +743,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       _lastFpsTime = now;
     }
 
-        // ==========================================
+    // ==========================================
     // ЭТАП 1: ОБРАБОТКА ВВОДА (ПРЫЖКИ) ДО ДВИЖЕНИЯ
     // ==========================================
     if (_currentLevel == 4) {
@@ -808,7 +809,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         } 
       } 
       else {
-        // ОБЫЧНЫЙ НАЗЕМНЫЙ РЕЖИМ 4 УРОВНЯ (Строки 807-816)
+        // ОБЫЧНЫЙ НАЗЕМНЫЙ РЕЖИМ 4 УРОВНЯ
         _player.vy += _player.gravity;
         if (_player.vy > 15) _player.vy = 15;
         _player.y += _player.vy;
@@ -875,7 +876,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       }
     }
 
-    // ЦИКЛ Б: ОБРАБОТКА ТОЛЬКО ПЛАТФОРМ
+    // ЦИКЛ Б: ОБРАБОТКА ТОЛЬКО ПЛАТФОРМ (С ЗАЩИТОЙ ДЛИННЫХ БЛОКОВ)
     for (var obs in _obstacles) {
       if (obs.type != 'platform') continue; 
       if (obs.x + obs.w < _player.x - 150 || obs.x > _player.x + 900) continue;
@@ -914,8 +915,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       }
     }
 
-
-
     // Вращение куба в воздухе
     if (_currentLevel == 4) {
       double portalInX = _levelLength * 0.35;
@@ -935,7 +934,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     // ==========================================
     // ЭТАП 4: ЛОГИКА ФИНАЛЬНОГО ПОРТАЛА И ИСКР
     // ==========================================
-    double portalTargetY = _floorY - 150; // Центр овального портала
+    double portalTargetY = _floorY - 150; 
 
     // Генерируем зеленые искры из портала, если игрок приблизился к финишу
     if (_player.x >= _levelLength - 1000 && _player.x < _levelLength + 300) {
@@ -946,7 +945,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         _portalParticles.add(DeathParticle(
           x: _levelLength + (rand.nextDouble() * 40 - 20),
           y: portalTargetY + (rand.nextDouble() * 160 - 80),
-          vx: -math.cos(pAngle).abs() * pSpeed - 2, // Летят навстречу игроку
+          vx: -math.cos(pAngle).abs() * pSpeed - 2, 
           vy: math.sin(pAngle) * pSpeed,
           size: 4 + rand.nextDouble() * 4,
           alpha: 1.0,
@@ -967,18 +966,17 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     if (_player.x >= _levelLength - 250 && _isPlaying) {
       _player.vy = 0;
       _player.isGrounded = false;
-      _player.y += (portalTargetY - (_player.y + _player.size / 2)) * 0.12; // Плавный магнит в центр
+      _player.y += (portalTargetY - (_player.y + _player.size / 2)) * 0.12; 
     }
 
-    // ==========================================
+        // ==========================================
     // ЭТАП 5: ПРОВЕРКА ФИНАЛА И СОХРАНЕНИЕ
     // ==========================================
     if (_player.x >= _levelLength) {
       _gameTimer?.cancel();
       _isPlaying = false;
-      _portalParticles.clear(); // Убираем искры
+      _portalParticles.clear(); 
       
-      // Динамическое сохранение рекорда и собранных медалей
       if (_currentLevel == 1) {
         _maxProgress = 100; 
         _prefs.setInt('cybics_max_progress', 100);
@@ -1006,15 +1004,15 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       }
       _stopAllLevelTracks();
 
-      // Выводим экран победы. Закрытие ручное, по кнопке "ОК"
       if (mounted) {
         setState(() { 
           _showVictory = true; 
         });
       }
     }
-  } // Конец метода _updatePhysics
-}
+  }
+
+
 
  
   void _gameOver() {
