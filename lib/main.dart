@@ -499,36 +499,36 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             continue;
           }
 
-          // МЕДАЛЬ №2 (50%): НОРМАЛЬНЫЕ 3 ШИПА И ПОДНЯТАЯ МОНЕТКА
+          // МЕДАЛЬ №2 (50%): НАСТРОЙКА СФЕРЫ ВЫШЕ, МОНЕТКА ТАМ ЖЕ
           if (progressPct >= 50.0 && !spawnedMedal2Obstacle) {
             double platX = nextX;
             double platY = 100;
-            double platW = 500; // Большая устойчивая платформа
+            double platW = 500; 
             
             _obstacles.add(Obstacle(type: 'platform', x: platX, y: platY, w: platW, h: 60));
             
-            // ЧЕСТНЫЕ 3 ШИПА (расстояние между ними ровно 30 пикселей)
+            // 3 нормальных шипа
             _obstacles.add(Obstacle(type: 'spike', x: platX + 220, y: 160));
             _obstacles.add(Obstacle(type: 'spike', x: platX + 250, y: 160)); 
             _obstacles.add(Obstacle(type: 'spike', x: platX + 280, y: 160));
 
-            // Сфера висит строго в середине над центральным шипом
-            _orbs.add(GameOrb(x: platX + 250, y: platY + 110, collected: false));
+            // ИСПРАВЛЕНИЕ: Подняли сферу чуть повыше (ближе к центру экрана: Y = platY + 140 вместо 110)
+            _orbs.add(GameOrb(x: platX + 250, y: platY + 140, collected: false));
             
-            // ИСПРАВЛЕНИЕ: Подняли медаль повыше (сместили Y ближе к полу: 210 вместо 150)
+            // Монетка осталась на своей высоте (Y = platY + 210)
             _medals.add(Medal(id: 1, x: platX + 340, y: platY + 210));
 
-            // Корректный сдвиг камеры (длина платформы + короткий зазор в 150px)
             nextX += platW + 150; 
             spawnedMedal2Obstacle = true;
             continue;
           }
 
-          // МЕДАЛЬ №3 (67%): Скрытая медаль в пропасти
+          // МЕДАЛЬ №3 (67%): СТРОГО ОДНА СКРЫТАЯ МОНЕТА В ПРОПАСТИ (ЛИШНИЕ ВИДИМЫЕ УДАЛЕНЫ)
           if (progressPct >= 66.5 && progressPct <= 68.5 && !spawnedMedal3Obstacle) {
             double m3X = nextX;
             _obstacles.add(Obstacle(type: 'platform', x: m3X, y: 100, w: 150, h: 60));
             
+            // Единственная честная монета внизу пропасти (ID: 2)
             _medals.add(Medal(id: 2, x: m3X + 265, y: 320)); 
             _obstacles.add(Obstacle(type: 'platform', x: m3X + 130, y: 380, w: 270, h: 20));
             _obstacles.add(Obstacle(type: 'platform', x: m3X + 350, y: 380, w: 50, h: 200));
@@ -541,6 +541,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             continue;
           }
 
+          // Обычный рандом внутри инверсии (УДАЛЕНЫ любые скрытые/случайные спавны медалей!)
           double rMode = _seededRandom(invertedSeed++);
           if (rMode < 0.33) {
             _obstacles.add(Obstacle(type: 'platform', x: nextX, y: 80, w: 180, h: 60));
@@ -568,7 +569,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             continue;
           }
 
-          // МЕДАЛЬ №1 (28%): ГАРАНТИРОВАННАЯ ПЕРВАЯ МОНЕТКА УРОВНЯ
+          // МЕДАЛЬ №1 (28%): НАШЕ ИСПРАВЛЕННОЕ СТАБИЛЬНОЕ ПРЕПЯТСТВИЕ С МОНЕТОЙ (ID: 0)
           if (progressPct >= 27.5 && progressPct <= 29.5 && !spawnedMedal1Obstacle) {
             double startX = nextX;
             double platW = 210;
@@ -579,7 +580,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             }
             
             _orbs.add(GameOrb(x: startX + 105, y: _floorY - 170, collected: false));
-            _medals.add(Medal(id: 0, x: startX + 240, y: _floorY - 230)); // ID: 0 — честная первая медаль!
+            
+            // Честный спавн первой монеты (ID: 0), теперь работает без конфликтов!
+            _medals.add(Medal(id: 0, x: startX + 240, y: _floorY - 230)); 
             
             nextX += platW + 150; 
             spawnedMedal1Obstacle = true;
