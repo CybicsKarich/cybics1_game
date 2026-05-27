@@ -742,7 +742,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       _lastFpsTime = now;
     }
 
-    // ==========================================
+        // ==========================================
     // ЭТАП 1: ОБРАБОТКА ВВОДА (ПРЫЖКИ) ДО ДВИЖЕНИЯ
     // ==========================================
     if (_currentLevel == 4) {
@@ -757,6 +757,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       bool isAutoFlying = _isGravityInverted && (_player.x < portalInX + 600);
 
       if (_isPressing && _player.isGrounded && !isAutoFlying) {
+        // НАСТРОЙКА: Прыжок в инверсии равен 17.0
         _player.vy = _isGravityInverted ? 17.0 : _player.jumpForce;
         _player.isGrounded = false;
       }
@@ -785,26 +786,29 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           _player.y = targetPlatformY;
           _player.isGrounded = true;
         }
-              } else if (_isGravityInverted) {
-          _player.vy -= 1.3;
-          if (_player.vy < -14) _player.vy = -14;
-          _player.y += _player.vy;
+      } 
+      else if (_isGravityInverted) {
+        // НАСТРОЙКА: Притяжение к потолку равно 1.3
+        _player.vy -= 1.3;
+        if (_player.vy < -14) _player.vy = -14;
+        _player.y += _player.vy;
 
-          // ИСПРАВЛЕНИЕ: Ограничиваем смертельную зону потолка и отключаем её на 64%-69%, 
-          // чтобы кубик мог спокойно упасть в пропасть за скрытой медалью №3 и зайти в туннель
-          if (progressPct >= 64.0 && progressPct <= 69.0) {
-            // Если игрок упал глубоко в пропасть, автоматически выключаем инверсию гравитации (телепортируем на нормальный путь)
-            if (_player.y >= 350) {
-              _isGravityInverted = false;
-              _player.vy = 0;
-            }
-          } else {
-            // Вне секретной зоны потолочная смерть работает стандартно, но с более мягким порогом (y <= 10 вместо y <= 30)
-            if (_player.y <= 10 && !wasGrounded && !_isGodMode) { 
-              _gameOver(); 
-              return; 
-            }
-          } else {
+        // ИСПРАВЛЕНИЕ: Защита и отключение смерти на потолке на 64%-69%
+        if (progressPct >= 64.0 && progressPct <= 69.0) {
+          if (_player.y >= 350) {
+            _isGravityInverted = false;
+            _player.vy = 0;
+          }
+        } 
+        else {
+          if (_player.y <= 10 && !wasGrounded && !_isGodMode) { 
+            _gameOver(); 
+            return; 
+          }
+        } 
+      } 
+      else {
+        // ОБЫЧНЫЙ НАЗЕМНЫЙ РЕЖИМ 4 УРОВНЯ (Строки 807-816)
         _player.vy += _player.gravity;
         if (_player.vy > 15) _player.vy = 15;
         _player.y += _player.vy;
@@ -813,9 +817,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           _player.vy = 0;
           _player.isGrounded = true;
         }
-      }
-      }
-   } else {
+      } 
+    } 
+    else {
+      // ЛОГИКА ДЛЯ 1, 2 И 3 УРОВНЕЙ (Обычный куб / Корабль)
       if (_player.isShip) {
         if (_isPressing) _player.vy -= 0.9; else _player.vy += 0.7;
         _player.vy = _player.vy.clamp(-8, 8);
@@ -831,13 +836,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         _player.vy = 0;
         _player.isGrounded = true;
       }
-    }
+    } 
 
     if (_player.y < 0 || _player.y > _gameHeight) {
       if (!_isGodMode) { _gameOver(); return; }
     }
 
-                // ==========================================
+    // ==========================================
     // ЭТАП 3: РАСЧЕТ КОЛЛИЗИЙ (РАЗДЕЛЬНЫЕ ЦИКЛЫ)
     // ==========================================
     _currentProgress = (progressPct.clamp(0, 100)).floor();
@@ -859,7 +864,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
     // ЦИКЛ А: ОБРАБОТКА ТОЛЬКО ШИПОВ
     for (var obs in _obstacles) {
-      if (obs.type != 'spike') continue; // Пропускаем всё, что не шип
+      if (obs.type != 'spike') continue; 
       if (obs.x < _player.x - 150 || obs.x > _player.x + 900) continue;
 
       bool isUpsideDown = (obs.y < 200);
@@ -872,7 +877,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
     // ЦИКЛ Б: ОБРАБОТКА ТОЛЬКО ПЛАТФОРМ
     for (var obs in _obstacles) {
-      if (obs.type != 'platform') continue; // Пропускаем всё, что не платформа
+      if (obs.type != 'platform') continue; 
       if (obs.x + obs.w < _player.x - 150 || obs.x > _player.x + 900) continue;
 
       bool stoodOnPlatform = false;
@@ -880,7 +885,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       // Железобетонный захват поверхности блока
       if (_player.x + _player.size > obs.x + 2 && _player.x < obs.x + obs.w - 2) {
         if (_currentLevel == 4 && _isGravityInverted) {
-          // В инверсии ловим у потолка
           if (_player.vy <= 0 && _player.y <= obs.y + obs.h && _player.y >= obs.y + obs.h - 32) {
             _player.y = obs.y + obs.h;
             _player.vy = 0;
@@ -888,7 +892,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             stoodOnPlatform = true;
           }
         } else {
-          // Обычный режим (все уровни): ловим на поверхности блока
           if (_player.vy >= 0 && _player.y + _player.size >= obs.y && _player.y + _player.size <= obs.y + 32) {
             _player.y = obs.y - _player.size;
             _player.vy = 0;
