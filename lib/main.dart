@@ -98,6 +98,8 @@ class GameScreen extends StatefulWidget {
 class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   GameState _state = GameState.mainMenu;
   
+  final ValueNotifier<int> _gameTickNotifier = ValueNotifier<int>(0);
+
   late SharedPreferences _prefs;
   int _maxProgress = 0, _maxProgress2 = 0, _maxProgress3 = 0, _maxProgress4 = 0;
   int _attempts1 = 0, _attempts2 = 0, _attempts3 = 0, _attempts4 = 0;
@@ -612,12 +614,11 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     });
 
         _gameTimer = Timer.periodic(const Duration(milliseconds: 16), (timer) {
-      if (_isPlaying && !_isPaused) {
-        _updatePhysics();
-        // ИСПРАВЛЕНИЕ: Даем команду холсту перерисоваться без вызова тяжелого setState
-        _gameTickNotifier.value++; 
-      }
-    });
+  if (_isPlaying && !_isPaused) {
+    _updatePhysics(); // Считаем физику в фоне
+    _gameTickNotifier.value++; // Даем холсту сигнал: "пора рисовать"
+  }
+});
   }
 
     void _checkOrbActivation() {
@@ -649,207 +650,219 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   }
 
 
-       void _updatePhysics() {
-      _player.x += 7.5;
-      _cameraX = _player.x - 200;
+    void _updatePhysics() {
+    _player.x += 7.5;
+    _cameraX = _player.x - 200;
 
-      _trailParticles.add(Offset(_player.x + _player.size / 2, _player.y + _player.size / 2));
-      if (_trailParticles.length > 15) _trailParticles.removeAt(0);
+    double progressPct = (_player.x / _levelLength) * 100;
 
-      _frameCount++;
-      DateTime now = DateTime.now();
-      if (now.difference(_lastFpsTime).inSeconds >= 1) {
-        _fpsCount = _frameCount;
-        _frameCount = 0;
-        _lastFpsTime = now;
-      }
+    // Определяем режим корабля (для уровней 2 и 3 в диапазоне 40%-75%)
+    _player.isShip = (progressPct >= 40 && progressPct <= 75 && (_currentLevel == 2 || _currentLevel == 3));
 
-      double progressPct = (_player.x / _levelLength) * 100;
+    // ИСПРАВЛЕНИЕ: Добавляем частицы шлейфа ВСЕГДА (и для куба, и для самолётика)
+    // Координата X установлена в _player.x (это задняя левая грань тела персонажа)
+    _trailParticles.add(Offset(_player.x, _player.y + _player.size / 2));
+    if (_trailParticles.length > 15) _trailParticles.removeAt(0);
 
-      // ==========================================
-      // ЭТАП 1: ОБРАБОТКА ВВОДА (ПРЫЖКИ) ДО ДВИЖЕНИЯ
-      // ==========================================
-      if (_currentLevel == 4) {
-        _player.isShip = false;
-        if (progressPct >= 35 && progressPct <= 70) {
-          _isGravityInverted = true;
-        } else {
-          _isGravityInverted = false;
-        }
-        
-        double portalInX = _levelLength * 0.35;
-        bool isAutoFlying = _isGravityInverted && (_player.x < portalInX + 600);
+    _frameCount++;
+    DateTime now = DateTime.now();
+    if (now.difference(_lastFpsTime).inSeconds >= 1) {
+      _fpsCount = _frameCount;
+      _frameCount = 0;
+      _lastFpsTime = now;
+    }
 
-        if (_isPressing && _player.isGrounded && !isAutoFlying) {
-          _player.vy = _isGravityInverted ? 12.0 : _player.jumpForce;
-          _player.isGrounded = false;
-        }
+    // ==========================================
+    // ЭТАП 1: ОБРАБОТКА ВВОДА (ПРЫЖКИ) ДО ДВИЖЕНИЯ
+    // ==========================================
+    if (_currentLevel == 4) {
+      _player.isShip = false;
+      if (progressPct >= 35 && progressPct <= 70) {
+        _isGravityInverted = true;
       } else {
-        _player.isShip = (progressPct >= 40 && progressPct <= 75 && (_currentLevel == 2 || _currentLevel == 3));
-        if (!_player.isShip && _isPressing && _player.isGrounded) {
-          _player.vy = _player.jumpForce;
-          _player.isGrounded = false;
-        }
+        _isGravityInverted = false;
       }
+      
+      double portalInX = _levelLength * 0.35;
+      bool isAutoFlying = _isGravityInverted && (_player.x < portalInX + 600);
 
-      // ==========================================
-      // ЭТАП 2: ПРИМЕНЕНИЕ ФИЗИКИ И СДВИГ ТЕЛА
-      // ==========================================
-      bool wasGrounded = _player.isGrounded;
-      _player.isGrounded = false;
+      if (_isPressing && _player.isGrounded && !isAutoFlying) {
+        _player.vy = _isGravityInverted ? 12.0 : _player.jumpForce;
+        _player.isGrounded = false;
+      }
+    } else {
+      if (!_player.isShip && _isPressing && _player.isGrounded) {
+        _player.vy = _player.jumpForce;
+        _player.isGrounded = false;
+      }
+    }
 
-      if (_currentLevel == 4) {
-        double portalInX = _levelLength * 0.35;
-        bool isAutoFlying = _isGravityInverted && (_player.x < portalInX + 600);
+    // ==========================================
+    // ЭТАП 2: ПРИМЕНЕНИЕ ФИЗИКИ И СДВИГ ТЕЛА
+    // ==========================================
+    bool wasGrounded = _player.isGrounded;
+    _player.isGrounded = false;
 
-        if (isAutoFlying) {
-          double targetPlatformY = 160;
-          _player.y += (targetPlatformY - _player.y) * 0.12;
-          _player.vy = 0;
-          if ((_player.y - targetPlatformY).abs() < 5) {
-            _player.y = targetPlatformY;
-            _player.isGrounded = true;
-          }
-        } else if (_isGravityInverted) {
-          _player.vy -= 1.1;
-          if (_player.vy < -13) _player.vy = -13;
-          _player.y += _player.vy;
-          if (_player.y <= 30 && !wasGrounded && !_isGodMode) { _gameOver(); return; }
-        } else {
-          _player.vy += _player.gravity;
-          if (_player.vy > 15) _player.vy = 15;
-          _player.y += _player.vy;
-          if (_player.y >= _floorY - _player.size) {
-            _player.y = _floorY - _player.size;
-            _player.vy = 0;
-            _player.isGrounded = true;
-          }
+    if (_currentLevel == 4) {
+      double portalInX = _levelLength * 0.35;
+      bool isAutoFlying = _isGravityInverted && (_player.x < portalInX + 600);
+
+      if (isAutoFlying) {
+        double targetPlatformY = 160;
+        _player.y += (targetPlatformY - _player.y) * 0.12;
+        _player.vy = 0;
+        if ((_player.y - targetPlatformY).abs() < 5) {
+          _player.y = targetPlatformY;
+          _player.isGrounded = true;
         }
+      } else if (_isGravityInverted) {
+        _player.vy -= 1.1;
+        if (_player.vy < -13) _player.vy = -13;
+        _player.y += _player.vy;
+        if (_player.y <= 30 && !wasGrounded && !_isGodMode) { _gameOver(); return; }
       } else {
-        if (_player.isShip) {
-          if (_isPressing) _player.vy -= 0.9; else _player.vy += 0.7;
-          _player.vy = _player.vy.clamp(-8, 8);
-          _player.y += _player.vy;
-          if (_player.y <= 100) { _player.y = 100; _player.vy = 0; }
-        } else {
-          _player.vy += _player.gravity;
-          _player.y += _player.vy;
-        }
-
+        _player.vy += _player.gravity;
+        if (_player.vy > 15) _player.vy = 15;
+        _player.y += _player.vy;
         if (_player.y >= _floorY - _player.size) {
           _player.y = _floorY - _player.size;
           _player.vy = 0;
           _player.isGrounded = true;
         }
       }
-
-      if (_player.y < 0 || _player.y > _gameHeight) {
-        if (!_isGodMode) { _gameOver(); return; }
-      }
-
-      // ==========================================
-      // ЭТАП 3: РАСЧЕТ КОЛЛИЗИЙ (ПЛАТФОРМЫ И ШИПЫ)
-      // ==========================================
-      _currentProgress = (progressPct.clamp(0, 100)).floor();
-
-      // Сбор монет (только для уровней 1, 2, 3)
-      if (_currentLevel != 4) {
-        for (var m in _medals) {
-          if (m.x < _player.x - 100 || m.x > _player.x + 200) continue;
-          if (!m.collected) {
-            double distX = ((_player.x + _player.size / 2) - m.x).abs();
-            double distY = ((_player.y + _player.size / 2) - m.y).abs();
-            if (distX < 35 && distY < 35) {
-              m.collected = true;
-              if (!_collectedThisRun.contains(m.id)) _collectedThisRun.add(m.id);
-            }
-          }
-        }
-      }
-
-      for (var obs in _obstacles) {
-        if (obs.x < _player.x - 150 || obs.x > _player.x + 900) continue;
-
-        if (obs.type == 'spike') {
-          bool isUpsideDown = (obs.y < 200);
-          if (_player.x + _player.size > obs.x + 8 && _player.x < obs.x + 22 &&
-              ((!isUpsideDown && _player.y + _player.size > obs.y - 30 && _player.y < obs.y) ||
-               (isUpsideDown && _player.y < obs.y && _player.y + _player.size > obs.y - 30))) {
-            if (!_isGodMode) { _gameOver(); return; }
-          }
-        } 
-        else if (obs.type == 'platform') {
-          // ЖЕЛЕЗОБЕТОННЫЙ ЗАХВАТ ПОВЕРХНОСТИ БЛОКА
-          if (_player.x + _player.size > obs.x + 4 && _player.x < obs.x + obs.w - 4) {
-            if (_currentLevel == 4 && _isGravityInverted) {
-              // В инверсии ловим у потолка
-              if (_player.vy <= 0 && _player.y <= obs.y + obs.h && _player.y >= obs.y + obs.h - 24) {
-                _player.y = obs.y + obs.h;
-                _player.vy = 0;
-                _player.isGrounded = true;
-                continue;
-              }
-            } else {
-              // Обычный режим (все уровни): ловим на поверхности блока
-              if (_player.vy >= 0 && _player.y + _player.size >= obs.y && _player.y + _player.size <= obs.y + 24) {
-                _player.y = obs.y - _player.size;
-                _player.vy = 0;
-                _player.isGrounded = true;
-                continue;
-              }
-            }
-          }
-
-          // Честная смерть от удара в торец
-          if (!_isGodMode) {
-            if (_player.x + _player.size > obs.x && _player.x < obs.x + obs.w) {
-              if (_player.y + _player.size > obs.y + 12 && _player.y < obs.y + obs.h - 4) {
-                _gameOver();
-                return;
-              }
-            }
-          }
-        }
-      }
-
-      // Вращение куба в воздухе
-      if (_currentLevel == 4) {
-        double portalInX = _levelLength * 0.35;
-        bool isAutoFlying = _isGravityInverted && (_player.x < portalInX + 600);
-        if (!_player.isGrounded) {
-          _player.rotation += _isGravityInverted ? -0.08 : 0.08;
-        } else {
-          _player.rotation = (_player.rotation / (math.pi / 2)).round() * (math.pi / 2);
-        }
+    } else {
+      if (_player.isShip) {
+        if (_isPressing) _player.vy -= 0.9; else _player.vy += 0.7;
+        _player.vy = _player.vy.clamp(-8, 8);
+        _player.y += _player.vy;
+        if (_player.y <= 100) { _player.y = 100; _player.vy = 0; }
       } else {
-        if (!_player.isShip) {
-          if (!_player.isGrounded) _player.rotation += 0.08;
-          else _player.rotation = (_player.rotation / (math.pi / 2)).round() * (math.pi / 2);
-        }
+        _player.vy += _player.gravity;
+        _player.y += _player.vy;
       }
 
-      // Проверка финиша
-      if (_player.x >= _levelLength) {
-        _gameTimer?.cancel();
-        _isPlaying = false;
-        _showVictory = true;
-        
-        if (_currentLevel == 1) {
-          _maxProgress = 100; _prefs.setInt('cybics_max_progress', 100);
-        } else if (_currentLevel == 2) {
-          _maxProgress2 = 100; _prefs.setInt('cybics_max_progress_2', 100);
-          for (var id in _collectedThisRun) _savedMedals2[id] = true;
-          _prefs.setString('cybics_medals_2', jsonEncode(_savedMedals2));
-        } else if (_currentLevel == 3) {
-          _maxProgress3 = 100; _prefs.setInt('cybics_max_progress_3', 100);
-          for (var id in _collectedThisRun) _savedMedals3[id] = true;
-          _prefs.setString('cybics_medals_3', jsonEncode(_savedMedals3));
-        } else if (_currentLevel == 4) {
-          _maxProgress4 = 100; _prefs.setInt('cybics_max_progress_4', 100);
-        }
-        _stopAllLevelTracks();
+      if (_player.y >= _floorY - _player.size) {
+        _player.y = _floorY - _player.size;
+        _player.vy = 0;
+        _player.isGrounded = true;
       }
     }
+
+    if (_player.y < 0 || _player.y > _gameHeight) {
+      if (!_isGodMode) { _gameOver(); return; }
+    }
+
+    // ==========================================
+    // ЭТАП 3: РАСЧЕТ КОЛЛИЗИЙ (ПЛАТФОРМЫ И ШИПЫ)
+    // ==========================================
+    _currentProgress = (progressPct.clamp(0, 100)).floor();
+
+    // Сбор секретных монет (медалей)
+    if (_currentLevel != 4) {
+      for (var m in _medals) {
+        if (m.x < _player.x - 100 || m.x > _player.x + 200) continue;
+        if (!m.collected) {
+          double distX = ((_player.x + _player.size / 2) - m.x).abs();
+          double distY = ((_player.y + _player.size / 2) - m.y).abs();
+          if (distX < 35 && distY < 35) {
+            m.collected = true;
+            if (!_collectedThisRun.contains(m.id)) _collectedThisRun.add(m.id);
+          }
+        }
+      }
+    }
+
+    for (var obs in _obstacles) {
+      // Отсекаем объекты, которые далеко за пределами экрана
+      if (obs.x < _player.x - 150 || obs.x > _player.x + 900) continue;
+
+      if (obs.type == 'spike') {
+        bool isUpsideDown = (obs.y < 200);
+        if (_player.x + _player.size > obs.x + 8 && _player.x < obs.x + 22 &&
+            ((!isUpsideDown && _player.y + _player.size > obs.y - 30 && _player.y < obs.y) ||
+             (isUpsideDown && _player.y < obs.y + 30 && _player.y + _player.size > obs.y))) {
+          if (!_isGodMode) { _gameOver(); return; }
+        }
+      } 
+      else if (obs.type == 'platform') {
+        bool stoodOnPlatform = false;
+
+        // ИСПРАВЛЕНИЕ БАГА ПРОВАЛА: Зазор увеличен до 32px, чтобы ловить кубик на любой вертикальной скорости
+        if (_player.x + _player.size > obs.x + 2 && _player.x < obs.x + obs.w - 2) {
+          if (_currentLevel == 4 && _isGravityInverted) {
+            // Режим инверсии: ловим персонажа снизу вверх под потолочным блоком
+            if (_player.vy <= 0 && _player.y <= obs.y + obs.h && _player.y >= obs.y + obs.h - 32) {
+              _player.y = obs.y + obs.h;
+              _player.vy = 0;
+              _player.isGrounded = true;
+              stoodOnPlatform = true;
+            }
+          } else {
+            // Обычный режим: ловим падающего игрока строго на верхней поверхности блока
+            if (_player.vy >= 0 && _player.y + _player.size >= obs.y && _player.y + _player.size <= obs.y + 32) {
+              _player.y = obs.y - _player.size;
+              _player.vy = 0;
+              _player.isGrounded = true;
+              stoodOnPlatform = true;
+            }
+          }
+        }
+
+        // Если кубик твердо встал на платформу, торцевой удар (смерть) не обрабатывается
+        if (stoodOnPlatform) continue;
+
+        // Честный удар в боковой торец блока (смерть)
+        if (!_isGodMode) {
+          if (_player.x + _player.size > obs.x && _player.x < obs.x + obs.w) {
+            // Удар засчитывается только если игрок врезался глубоко в боковую стенку блока
+            if (_player.y + _player.size > obs.y + 10 && _player.y < obs.y + obs.h - 10) {
+              _gameOver();
+              return;
+            }
+          }
+        }
+      }
+    }
+
+    // Вращение куба в воздухе
+    if (_currentLevel == 4) {
+      double portalInX = _levelLength * 0.35;
+      bool isAutoFlying = _isGravityInverted && (_player.x < portalInX + 600);
+      if (!_player.isGrounded) {
+        _player.rotation += _isGravityInverted ? -0.08 : 0.08;
+      } else {
+        _player.rotation = (_player.rotation / (math.pi / 2)).round() * (math.pi / 2);
+      }
+    } else {
+      if (!_player.isShip) {
+        if (!_player.isGrounded) _player.rotation += 0.08;
+        else _player.rotation = (_player.rotation / (math.pi / 2)).round() * (math.pi / 2);
+      }
+    }
+
+    // Проверка финиша уровня
+    if (_player.x >= _levelLength) {
+      _gameTimer?.cancel();
+      _isPlaying = false;
+      _showVictory = true;
+      
+      if (_currentLevel == 1) {
+        _maxProgress = 100; _prefs.setInt('cybics_max_progress', 100);
+      } else if (_currentLevel == 2) {
+        _maxProgress2 = 100; _prefs.setInt('cybics_max_progress_2', 100);
+        for (var id in _collectedThisRun) _savedMedals2[id] = true;
+        _prefs.setString('cybics_medals_2', jsonEncode(_savedMedals2));
+      } else if (_currentLevel == 3) {
+        _maxProgress3 = 100; _prefs.setInt('cybics_max_progress_3', 100);
+        for (var id in _collectedThisRun) _savedMedals3[id] = true;
+        _prefs.setString('cybics_medals_3', jsonEncode(_savedMedals3));
+      } else if (_currentLevel == 4) {
+        _maxProgress4 = 100; _prefs.setInt('cybics_max_progress_4', 100);
+      }
+      _stopAllLevelTracks();
+    }
+  }
+
  
   void _gameOver() {
     _gameTimer?.cancel();
@@ -1582,29 +1595,46 @@ class GamePainter extends CustomPainter {
       }
     }
 
-    // 6. Шлейф
+        // ==========================================
+    // ИСПРАВЛЕННЫЙ БЛОК 6: ШЛЕЙФ ДЛЯ ВСЕХ РЕЖИМОВ
+    // ==========================================
     if (trailParticles.isNotEmpty) {
       canvas.save();
       for (int i = 0; i < trailParticles.length; i++) {
+        // Рассчитываем плавное затухание от старых частиц к новым
         double alpha = (i / trailParticles.length) * 0.25;
-        paint.color = player.isShip ? const Color(0xFFA855F7).withOpacity(alpha) : const Color(0xFF00F2FE).withOpacity(alpha);
-        double trailSize = player.isShip ? 24 : 30;
-
-        canvas.drawRect(
-          Rect.fromLTWH(trailParticles[i].dx - cameraX - trailSize / 2, trailParticles[i].dy - trailSize / 2, trailSize, trailSize),
-          paint,
-        );
+        
+        // Разделяем дизайн шлейфа под текущий режим игрока
+        if (player.isShip) {
+          paint.color = const Color(0xFFA855F7).withOpacity(alpha); // Фиолетовый для корабля
+          double trailSize = 24;
+          canvas.drawRect(
+            Rect.fromLTWH(trailParticles[i].dx - cameraX - trailSize / 2, trailParticles[i].dy - trailSize / 2, trailSize, trailSize),
+            paint,
+          );
+        } else {
+          paint.color = const Color(0xFF00F2FE).withOpacity(alpha); // Неоново-бирюзовый для кубика
+          double trailSize = 30;
+          canvas.drawRect(
+            Rect.fromLTWH(trailParticles[i].dx - cameraX - trailSize / 2, trailParticles[i].dy - trailSize / 2, trailSize, trailSize),
+            paint,
+          );
+        }
       }
       canvas.restore();
     }
 
-    // 7. Отрисовка кубика или самолётика
+    // ==========================================
+    // ИСПРАВЛЕННЫЙ БЛОК 7: ОРИГИНАЛЬНЫЙ ПЕРСОНАЖ
+    // ==========================================
     if (isPlaying) {
       canvas.save();
+      // Центрируем матрицу canvas по центру персонажа для корректного вращения
       canvas.translate(player.x - cameraX + player.size / 2, player.y + player.size / 2);
       canvas.rotate(player.rotation);
 
       if (player.isShip) {
+        // ВОЗВРАЩЕН ОРИГИНАЛЬНЫЙ ВИД САМОЛЁТИКА ИЗ ТВОЕЙ ИСХОДНОЙ СБОРКИ
         paint.color = const Color(0xFFC084FC);
         Path shipPath = Path()
           ..moveTo(-player.size / 2, 0)
@@ -1619,6 +1649,7 @@ class GamePainter extends CustomPainter {
         canvas.drawPath(shipPath, paint);
         paint.style = PaintingStyle.fill;
       } else {
+        // Отрисовка стандартного кубика Cybics
         paint.color = const Color(0xFF00F2FE);
         canvas.drawRect(Rect.fromCircle(center: Offset.zero, radius: player.size / 2), paint);
 
@@ -1630,6 +1661,7 @@ class GamePainter extends CustomPainter {
       }
       canvas.restore();
     }
+
 
         // ==========================================
     // ОПТИМИЗИРОВАННЫЙ БЛОК 8: ФИОЛЕТОВЫЕ ПОРТАЛЫ
@@ -1789,7 +1821,3 @@ class GamePainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }
-
-
-
-
