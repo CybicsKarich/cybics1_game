@@ -490,41 +490,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
       while (nextX < _levelLength - 1000) {
         double progressPct = (nextX / _levelLength) * 100;
-
-        // ======================================================================
-        // НОВОЕ УНИКАЛЬНОЕ ПРЕПЯТСТВИЕ С ТРЕМЯ СФЕРАМИ И МЕДАЛЬЮ №1 (СТРОГО ОДИН РАЗ)
-        // ======================================================================
-        if (progressPct >= 27.5 && progressPct <= 29.5 && !spawnedMedal1Obstacle) {
-          double startX = nextX;
-          
-          // 1. Длинная наземная платформа-основание
-          _obstacles.add(Obstacle(type: 'platform', x: startX, y: _floorY - 40, w: 360, h: 40));
-          
-          // 2. Ряд опасных шипов, которые стоят на этой платформе
-          for (int i = 0; i < 12; i++) {
-            _obstacles.add(Obstacle(type: 'spike', x: startX + (i * 30), y: _floorY - 40));
-          }
-          
-          // 3. СФЕРА 1: Стартовая (висит над началом шипов)
-          _orbs.add(GameOrb(x: startX + 60, y: _floorY - 120, collected: false));
-          
-          // 4. СФЕРА 2: Выше и правее (находится на траектории прыжка от первой)
-          _orbs.add(GameOrb(x: startX + 180, y: _floorY - 200, collected: false));
-          
-          // 5. СФЕРА 3 (УНИКАЛЬНАЯ): Ещё выше и правее, прямо перед концом препятствия
-          _orbs.add(GameOrb(x: startX + 300, y: _floorY - 280, collected: false));
-          
-          // 6. НЕБОЛЬШАЯ ПЛАТФОРМА после шипов, куда кубик приземляется после цепочки сфер
-          _obstacles.add(Obstacle(type: 'platform', x: startX + 380, y: _floorY - 60, w: 100, h: 60));
-          
-          // 7. МЕДАЛЬ №1 (ID: 0): Висит на пике траектории от 3-й сферы — выше и правее неё (над платформой)
-          _medals.add(Medal(id: 0, x: startX + 430, y: _floorY - 380)); 
-          
-          // 8. НАСТРОЙКА: Огромная пустая прямая (900px) после препятствия, чтобы игрок успел среагировать
-          nextX = startX + 380 + 100 + 900; 
-          spawnedMedal1Obstacle = true;
-          continue; // Переходим к следующему шагу генерации, пропуская случайные объекты
-        }
         bool isGravityZone = progressPct >= 35 && progressPct <= 70;
 
         // --- ЗОНА ИНВЕРСИИ ГРАВИТАЦИИ (35% - 70%) ---
@@ -600,7 +565,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             nextX += 650;
           }
         } 
-        // --- НАЗЕМНАЯ ЗОНА ОБЫЧНОЙ ГРАВИТАЦИИ ---
+                // --- НАЗЕМНАЯ ЗОНА ОБЫЧНОЙ ГРАВИТАЦИИ ---
         else {
           if (progressPct > 70 && !safeGapSpawned) {
             nextX = portalOutX + 600;
@@ -608,7 +573,39 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             continue;
           }
 
+          // ======================================================================
+          // ИСПРАВЛЕНИЕ: Препятствие генерируется динамически по ходу движения X,
+          // как только мы пересекаем отметку 25% прогресса (примерно начало уровня)
+          // ======================================================================
+          if (progressPct >= 25.0 && !spawnedMedal1Obstacle) {
+            double startX = nextX;
+            
+            // Основание (удлиняем платформу под тремя сферами)
+            _obstacles.add(Obstacle(type: 'platform', x: startX, y: _floorY - 40, w: 380, h: 40));
+            
+            // 12 шипов подряд
+            for (int i = 0; i < 12; i++) {
+              _obstacles.add(Obstacle(type: 'spike', x: startX + (i * 30), y: _floorY - 40));
+            }
+            
+            // НАША ЗАДУМКА: Лесенка из ТРЁХ сфер вместо двух
+            _orbs.add(GameOrb(x: startX + 60, y: _floorY - 120, collected: false));
+            _orbs.add(GameOrb(x: startX + 170, y: _floorY - 190, collected: false));
+            _orbs.add(GameOrb(x: startX + 280, y: _floorY - 260, collected: false)); // Третья сфера выше и правее!
+            
+            // Платформа после шипов, куда приземляется игрок
+            _obstacles.add(Obstacle(type: 'platform', x: startX + 380, y: _floorY - 60, w: 110, h: 60));
+            
+            // МОНЕТКА: На пике прыжка от третьей сферы (правее и выше неё)
+            _medals.add(Medal(id: 0, x: startX + 410, y: _floorY - 370)); 
+            
+            // Безопасный отступ в 900 пикселей, чтобы игрок не умер сразу после забора
+            nextX = startX + 380 + 110 + 900; 
+            spawnedMedal1Obstacle = true;
+            continue;
+          }
 
+          // Стандартный рандом (срабатывает на остальных участках пола)
           double r = _seededRandom(seed++);
           if (r < 0.35) {
             _orbs.add(GameOrb(x: nextX + 110, y: _floorY - 110, collected: false));
