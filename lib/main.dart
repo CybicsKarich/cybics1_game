@@ -523,23 +523,28 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             continue;
           }
 
-          // МЕДАЛЬ №3 (67%): СТРОГО ОДНА СКРЫТАЯ МОНЕТА В ПРОПАСТИ (ЛИШНИЕ ВИДИМЫЕ УДАЛЕНЫ)
+                    // МЕДАЛЬ №3 (67%): СЕКРЕТНАЯ МОНЕТА В ИНВЕРТИРОВАННОЙ ПРОПАСТИ НАВЕРХУ
           if (progressPct >= 66.5 && progressPct <= 68.5 && !spawnedMedal3Obstacle) {
             double m3X = nextX;
-            _obstacles.add(Obstacle(type: 'platform', x: m3X, y: 100, w: 150, h: 60));
             
-            // Единственная честная монета внизу пропасти (ID: 2)
-            _medals.add(Medal(id: 2, x: m3X + 265, y: 320)); 
-            _obstacles.add(Obstacle(type: 'platform', x: m3X + 130, y: 380, w: 270, h: 20));
-            _obstacles.add(Obstacle(type: 'platform', x: m3X + 350, y: 380, w: 50, h: 200));
+            // Платформа-потолок, с которой игрок должен спрыгнуть/упасть «в пропасть»
+            _obstacles.add(Obstacle(type: 'platform', x: m3X, y: 100, w: 150, h: 40));
+            
+            // ИСПРАВЛЕНИЕ: Переместили монетку на самый верх (Y = 40), прямо над пропастью инверсии
+            _medals.add(Medal(id: 2, x: m3X + 265, y: 40)); 
+            
+            // Спасительная платформа на потолке, которая ловит игрока после сбора монетки
+            _obstacles.add(Obstacle(type: 'platform', x: m3X + 200, y: 80, w: 130, h: 40));
 
-            _orbs.add(GameOrb(x: m3X + 265, y: 220, collected: false));
-            _obstacles.add(Obstacle(type: 'platform', x: m3X + 380, y: 100, w: 150, h: 60));
+            // Орб для прыжка обратно в коридор
+            _orbs.add(GameOrb(x: m3X + 265, y: 160, collected: false));
+            _obstacles.add(Obstacle(type: 'platform', x: m3X + 380, y: 100, w: 150, h: 40));
             
-            nextX += 150 + 380 + 150; 
+            nextX += 680; 
             spawnedMedal3Obstacle = true;
             continue;
           }
+
 
           // Обычный рандом внутри инверсии (УДАЛЕНЫ любые скрытые/случайные спавны медалей!)
           double rMode = _seededRandom(invertedSeed++);
@@ -622,7 +627,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     }
   
 
-  // --- ИГРОВОЙ ДВИЖОК И ФИЗИКА ---
   void _launchGameplay() {
     setState(() {
       _state = GameState.gameplay;
@@ -630,9 +634,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       _isPaused = false;
       _currentRunAttempts = 1;
 
+      // ТВОЯ ЛОГИКА: Попытки растут ТОЛЬКО если уровень ещё не пройден на 100%
       if (_currentLevel == 1 && _maxProgress < 100) { _attempts1++; _prefs.setInt('cybics_attempts_1', _attempts1); }
       if (_currentLevel == 2 && _maxProgress2 < 100) { _attempts2++; _prefs.setInt('cybics_attempts_2', _attempts2); }
-      if (_currentLevel == 3 && _maxProgress3 < 100) { _attempts3++; _prefs.setInt('cybics_attempts_3', _attempts3); }
+      if (_currentLevel == 3 && _maxProgress3 < 100) { _attempts3++; _prefs.setInt('cybics_attempts_3', _attempts3); } // Исправлено на _maxProgress3
       if (_currentLevel == 4 && _maxProgress4 < 100) { _attempts4++; _prefs.setInt('cybics_attempts_4', _attempts4); }
     });
 
@@ -692,17 +697,15 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
     for (var orb in _orbs) {
       if (orb.collected) continue;
-
-      // НАСТРОЙКА: Расширяем окно предварительного поиска сферы по X (с 120 до 150)
       if (orb.x < _player.x - 60 || orb.x > _player.x + 150) continue;
 
       double distX = (playerCenterX - orb.x).abs();
       double distY = (playerCenterY - orb.y).abs();
       
-      // НАСТРОЙКА: Увеличиваем радиус активации сферы с 55 до 70 пикселей для большего пространства
       if (distX < 70 && distY < 70) {
         orb.collected = true;
         
+        // ИСПРАВЛЕНИЕ: В инверсии сфера должна толкать куб ВНИЗ (vy = 14.5), а на полу — ВВЕРХ (vy = -14.5)
         if (_isGravityInverted) {
           _player.vy = 14.5;
         } else {
@@ -714,45 +717,33 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     }
   }
 
-      void _updatePhysics() {
-    // ОПТИМИЗИРОВАННЫЙ СДВИГ: Расчеты идут напрямую в переменные
+  void _updatePhysics() {
     _player.x += 7.5;
     _cameraX = _player.x - 200;
 
     double progressPct = (_player.x / _levelLength) * 100;
-
-    // Определяем режим корабля (для уровней 2 и 3 в диапазоне 40%-75%)
     _player.isShip = (progressPct >= 40 && progressPct <= 75 && (_currentLevel == 2 || _currentLevel == 3));
 
-    // ОБНОВЛЕНИЕ: Шлейф теперь работает и для кубика, и для самолётика
-    // Точка генерации смещена строго на заднюю (левую) грань персонажа
     _trailParticles.add(Offset(_player.x, _player.y + _player.size / 2));
     if (_trailParticles.length > 15) _trailParticles.removeAt(0);
 
+    // ОПТИМИЗАЦИЯ: Считаем тики вместо создания тяжелых объектов DateTime.now() каждую миллисекунду
     _frameCount++;
-    DateTime now = DateTime.now();
-    if (now.difference(_lastFpsTime).inSeconds >= 1) {
+    if (_frameCount >= 60) {
       _fpsCount = _frameCount;
       _frameCount = 0;
-      _lastFpsTime = now;
     }
 
-    // ==========================================
-    // ЭТАП 1: ОБРАБОТКА ВВОДА (ПРЫЖКИ) ДО ДВИЖЕНИЯ
-    // ==========================================
+    // --- ЭТАП 1: ОБРАБОТКА ВВОДА ---
     if (_currentLevel == 4) {
       _player.isShip = false;
-      if (progressPct >= 35 && progressPct <= 70) {
-        _isGravityInverted = true;
-      } else {
-        _isGravityInverted = false;
-      }
+      _isGravityInverted = (progressPct >= 35 && progressPct <= 70);
       
       double portalInX = _levelLength * 0.35;
       bool isAutoFlying = _isGravityInverted && (_player.x < portalInX + 600);
 
       if (_isPressing && _player.isGrounded && !isAutoFlying) {
-        // НАСТРОЙКА: Прыжок в инверсии равен 17.0
+        // ИСПРАВЛЕНИЕ: Прыжок вниз от потолка в инверсии должен быть равен 17.0 (положительный!)
         _player.vy = _isGravityInverted ? 17.0 : _player.jumpForce;
         _player.isGrounded = false;
       }
@@ -763,9 +754,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       }
     }
 
-    // ==========================================
-    // ЭТАП 2: ПРИМЕНЕНИЕ ФИЗИКИ И СДВИГ ТЕЛА
-    // ==========================================
+    // --- ЭТАП 2: ФИЗИКА ДВИЖЕНИЯ ---
     bool wasGrounded = _player.isGrounded;
     _player.isGrounded = false;
 
@@ -782,28 +771,29 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           _player.isGrounded = true;
         }
       } 
-      else if (_isGravityInverted) {
-        // НАСТРОЙКА: Притяжение к потолку равно 1.3
+            else if (_isGravityInverted) {
         _player.vy -= 1.3;
         if (_player.vy < -14) _player.vy = -14;
         _player.y += _player.vy;
 
-        // ИСПРАВЛЕНИЕ: Защита и отключение смерти на потолке на 64%-69%
+        // ИСПРАВЛЕНИЕ: Полностью переписанная, рабочая зона бессмертия (64% - 69%)
         if (progressPct >= 64.0 && progressPct <= 69.0) {
-          if (_player.y >= 350) {
-            _isGravityInverted = false;
+          // В этом диапазоне куб может улетать выше экрана (Y <= 10) и падать вниз без смерти
+          if (_player.y < -100) {
+            _player.y = -100; // Ограничиваем, чтобы куб не улетел слишком далеко в космос
             _player.vy = 0;
+            _player.isGrounded = true; // Считаем, что он «встал» на невидимый потолок секретки
           }
         } 
         else {
-          if (_player.y <= 10 && !wasGrounded && !_isGodMode) { 
+          // ОБЫЧНАЯ ЗОНА ИНВЕРСИИ: Вылет за верхнюю границу экрана (Y <= 5) означает смерть
+          if (_player.y <= 5 && !wasGrounded && !_isGodMode && _player.vy < 0) { 
             _gameOver(); 
             return; 
           }
         } 
       } 
       else {
-        // ОБЫЧНЫЙ НАЗЕМНЫЙ РЕЖИМ 4 УРОВНЯ
         _player.vy += _player.gravity;
         if (_player.vy > 15) _player.vy = 15;
         _player.y += _player.vy;
@@ -815,7 +805,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       } 
     } 
     else {
-      // ЛОГИКА ДЛЯ 1, 2 И 3 УРОВНЕЙ (Обычный куб / Корабль)
       if (_player.isShip) {
         if (_isPressing) _player.vy -= 0.9; else _player.vy += 0.7;
         _player.vy = _player.vy.clamp(-8, 8);
@@ -833,66 +822,60 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       }
     } 
 
-    if (_player.y < 0 || _player.y > _gameHeight) {
-      if (!_isGodMode) { _gameOver(); return; }
-    }
-
-        // ==========================================
-    // ЭТАП 3: РАСЧЕТ КОЛЛИЗИЙ (РАЗДЕЛЬНЫЕ ЦИКЛЫ)
-    // ==========================================
+    // --- ЭТАП 3: РАСЧЕТ КОЛЛИЗИЙ ---
     _currentProgress = (progressPct.clamp(0, 100)).floor();
 
-    // ИСПРАВЛЕНИЕ: Убрали ограничение "_currentLevel != 4". Теперь монеты работают везде!
     for (var m in _medals) {
+      if (m.collected) continue;
       if (m.x < _player.x - 100 || m.x > _player.x + 200) continue;
-      if (!m.collected) {
-        // Рассчитываем центры игрока и монеты
-        double playerCenterX = _player.x + _player.size / 2;
-        double playerCenterY = _player.y + _player.size / 2;
-        
-        double distX = (playerCenterX - m.x).abs();
-        double distY = (playerCenterY - m.y).abs();
-        
-        // ИСПРАВЛЕНИЕ: Расширили радиус сбора до 50 пикселей, чтобы монета 100% забиралась в инверсии и в полете
-        if (distX < 50 && distY < 50) {
-          m.collected = true;
-          if (!_collectedThisRun.contains(m.id)) _collectedThisRun.add(m.id);
+      
+      double playerCenterX = _player.x + _player.size / 2;
+      double playerCenterY = _player.y + _player.size / 2;
+      
+      if ((playerCenterX - m.x).abs() < 50 && (playerCenterY - m.y).abs() < 50) {
+        m.collected = true;
+        if (!_collectedThisRun.contains(m.id)) _collectedThisRun.add(m.id);
+      }
+    }
+
+    // Коллизии: Шипы
+    for (var obs in _obstacles) {
+      if (obs.type != 'spike') continue; 
+      if (obs.x < _player.x - 50 || obs.x > _player.x + 800) continue;
+
+      bool isSpikeUpsideDown = (obs.y < 200);
+      // ИСПРАВЛЕНИЕ: Сделали более точные, сбалансированные хитбоксы для шипов
+      if (_player.x + _player.size > obs.x + 6 && _player.x < obs.x + 24) {
+        if (!isSpikeUpsideDown) {
+          if (_player.y + _player.size > obs.y - 35 && _player.y < obs.y) {
+            if (!_isGodMode) { _gameOver(); return; }
+          }
+        } else {
+          if (_player.y < obs.y + 35 && _player.y + _player.size > obs.y) {
+            if (!_isGodMode) { _gameOver(); return; }
+          }
         }
       }
     }
-  
 
-    // ЦИКЛ А: ОБРАБОТКА ТОЛЬКО ШИПОВ
-    for (var obs in _obstacles) {
-      if (obs.type != 'spike') continue; 
-      if (obs.x < _player.x - 150 || obs.x > _player.x + 900) continue;
-
-      bool isUpsideDown = (obs.y < 200);
-      if (_player.x + _player.size > obs.x + 8 && _player.x < obs.x + 22 &&
-          ((!isUpsideDown && _player.y + _player.size > obs.y - 30 && _player.y < obs.y) ||
-           (isUpsideDown && _player.y < obs.y + 30 && _player.y + _player.size > obs.y))) {
-        if (!_isGodMode) { _gameOver(); return; }
-      }
-    }
-
-    // ЦИКЛ Б: ОБРАБОТКА ТОЛЬКО ПЛАТФОРМ (С ЗАЩИТОЙ ДЛИННЫХ БЛОКОВ)
+    // Коллизии: Платформы
     for (var obs in _obstacles) {
       if (obs.type != 'platform') continue; 
-      if (obs.x + obs.w < _player.x - 150 || obs.x > _player.x + 900) continue;
+      // ИСПРАВЛЕНИЕ: Теперь проверяется obs.x + obs.w (конец блока), длинные платформы больше не исчезают!
+      if (obs.x + obs.w < _player.x - 100 || obs.x > _player.x + 800) continue;
 
       bool stoodOnPlatform = false;
 
-      // Железобетонный захват поверхности блока
-      if (_player.x + _player.size > obs.x + 2 && _player.x < obs.x + obs.w - 2) {
+      if (_player.x + _player.size > obs.x + 4 && _player.x < obs.x + obs.w - 4) {
         if (_currentLevel == 4 && _isGravityInverted) {
-          if (_player.vy <= 0 && _player.y <= obs.y + obs.h && _player.y >= obs.y + obs.h - 32) {
+          if (_player.vy <= 0 && _player.y <= obs.y + obs.h && _player.y >= obs.y + obs.h - 25) {
             _player.y = obs.y + obs.h;
             _player.vy = 0;
             _player.isGrounded = true;
             stoodOnPlatform = true;
           }
         } else {
-          if (_player.vy >= 0 && _player.y + _player.size >= obs.y && _player.y + _player.size <= obs.y + 32) {
+          if (_player.vy >= 0 && _player.y + _player.size >= obs.y && _player.y + _player.size <= obs.y + 25) {
             _player.y = obs.y - _player.size;
             _player.vy = 0;
             _player.isGrounded = true;
@@ -903,10 +886,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
       if (stoodOnPlatform) continue;
 
-      // Честная смерть от удара в торец
       if (!_isGodMode) {
         if (_player.x + _player.size > obs.x && _player.x < obs.x + obs.w) {
-          if (_player.y + _player.size > obs.y + 10 && _player.y < obs.y + obs.h - 10) {
+          if (_player.y + _player.size > obs.y + 8 && _player.y < obs.y + obs.h - 8) {
             _gameOver();
             return;
           }
@@ -914,10 +896,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       }
     }
 
-    // Вращение куба в воздухе
+    // --- ЭТАП 4: ВРАЩЕНИЕ КУБА В ВОЗДУХЕ ---
     if (_currentLevel == 4) {
-      double portalInX = _levelLength * 0.35;
-      bool isAutoFlying = _isGravityInverted && (_player.x < portalInX + 600);
       if (!_player.isGrounded) {
         _player.rotation += _isGravityInverted ? -0.08 : 0.08;
       } else {
@@ -929,7 +909,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         else _player.rotation = (_player.rotation / (math.pi / 2)).round() * (math.pi / 2);
       }
     }
-
     // ==========================================
     // ЭТАП 4: ЛОГИКА ФИНАЛЬНОГО ПОРТАЛА И ИСКР
     // ==========================================
@@ -1014,15 +993,17 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         });
       }
     }
+  if (_player.y > _gameHeight || (_player.y < 0 && (progressPct < 64.0 || progressPct > 69.0))) {
+      if (!_isGodMode) { _gameOver(); return; }
+    }
   }
 
 
 
  
-  void _gameOver() {
+    void _gameOver() {
     _gameTimer?.cancel();
-    _retryTimer?.cancel(); // ИСПРАВЛЕНИЕ: Сбрасываем старый таймер ретрая
-    _collectedThisRun.clear();
+    _retryTimer?.cancel(); 
     _playDeathSound();
     bool isNewRecord = false;
 
@@ -1036,7 +1017,20 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       _maxProgress4 = _currentProgress; _prefs.setInt('cybics_max_progress_4', _maxProgress4); isNewRecord = true;
     }
 
-    // ИСПРАВЛЕНИЕ: Проверяем, жив ли еще виджет на экране перед вызовом setState
+    // ИСПРАВЛЕНИЕ: Сохраняем медали ОДИН РАЗ здесь, а не внутри анимационного таймера
+    for (var id in _collectedThisRun) {
+      if (_currentLevel == 1 && id < _savedMedals1.length) _savedMedals1[id] = true;
+      if (_currentLevel == 2 && id < _savedMedals2.length) _savedMedals2[id] = true;
+      if (_currentLevel == 3 && id < _savedMedals3.length) _savedMedals3[id] = true;
+      if (_currentLevel == 4 && id < _savedMedals4.length) _savedMedals4[id] = true;
+    }
+    _collectedThisRun.clear();
+
+    _prefs.setString('cybics_medals_1', jsonEncode(_savedMedals1));
+    _prefs.setString('cybics_medals_2', jsonEncode(_savedMedals2));
+    _prefs.setString('cybics_medals_3', jsonEncode(_savedMedals3));
+    _prefs.setString('cybics_medals_4', jsonEncode(_savedMedals4));
+
     if (!mounted) return; 
     setState(() {
       _isPlaying = false;
@@ -1058,44 +1052,30 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       }
     });
 
-    Timer? deathAnimTimer;
-    deathAnimTimer = Timer.periodic(const Duration(milliseconds: 16), (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
+    // ИСПРАВЛЕНИЕ: Анимация частиц обновляет холст через Нотификатор. Глобальный setState() больше не вызывается!
+    _gameTimer = Timer.periodic(const Duration(milliseconds: 16), (timer) {
+      if (!mounted) { timer.cancel(); return; }
+      
+      for (var p in _deathParticles) {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.15;
+        p.alpha -= 0.03;
+        if (p.alpha < 0) p.alpha = 0;
       }
-          // Перед вызовом setState в _gameOver добавь этот блок сохранения:
-    for (var id in _collectedThisRun) {
-      if (_currentLevel == 1) _savedMedals1[id] = true;
-      if (_currentLevel == 2) _savedMedals2[id] = true;
-      if (_currentLevel == 3) _savedMedals3[id] = true;
-      if (_currentLevel == 4) _savedMedals4[id] = true;
-    }
-    _prefs.setString('cybics_medals_1', jsonEncode(_savedMedals1));
-    _prefs.setString('cybics_medals_2', jsonEncode(_savedMedals2));
-    _prefs.setString('cybics_medals_3', jsonEncode(_savedMedals3));
-    _prefs.setString('cybics_medals_4', jsonEncode(_savedMedals4));
-
-      setState(() {
-        for (var p in _deathParticles) {
-          p.x += p.vx;
-          p.y += p.vy;
-          p.vy += 0.15;
-          p.alpha -= 0.03;
-          if (p.alpha < 0) p.alpha = 0;
-        }
-      });
+      _gameTickNotifier.value++; // Даем команду холсту перерисовать частицы смерти
     });
 
     _retryTimer = Timer(const Duration(milliseconds: 350), () {
-      deathAnimTimer?.cancel();
-      if (!mounted) return; // ИСПРАВЛЕНИЕ: Защита от вылета при выходе в меню
+      _gameTimer?.cancel();
+      if (!mounted) return;
       setState(() {
         _deathParticles.clear();
       });
       _continueGameOverLogic(isNewRecord);
     });
   }
+
 
   void _continueGameOverLogic(bool isNewRecord) {
     if (isNewRecord) {
@@ -1112,13 +1092,15 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   }
 
   void _registerNewAttempt() {
-    if (!mounted) return; // ИСПРАВЛЕНИЕ
+    if (!mounted) return; 
     setState(() {
-      _currentRunAttempts++;
+      _currentRunAttempts++; // Внутри текущего забега счётчик растёт всегда
+      
       if (!_isGodMode) {
+        // ТВОЯ ЛОГИКА + ИСПРАВЛЕНИЕ ОПЕЧАТКИ: Теперь 3-й уровень сохраняется строго в cybics_attempts_3
         if (_currentLevel == 1 && _maxProgress < 100) { _attempts1++; _prefs.setInt('cybics_attempts_1', _attempts1); }
         if (_currentLevel == 2 && _maxProgress2 < 100) { _attempts2++; _prefs.setInt('cybics_attempts_2', _attempts2); }
-        if (_currentLevel == 3 && _maxProgress3 < 100) { _attempts3++; _prefs.setInt('cybics_attempts_4', _attempts3); } // Исправлен твой баг с сохранением 3 уровня в cybics_attempts_4
+        if (_currentLevel == 3 && _maxProgress3 < 100) { _attempts3++; _prefs.setInt('cybics_attempts_3', _attempts3); } // ИСПРАВЛЕНО (было attempts_4)
         if (_currentLevel == 4 && _maxProgress4 < 100) { _attempts4++; _prefs.setInt('cybics_attempts_4', _attempts4); }
       }
     });
@@ -1202,7 +1184,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildLevelsMenu() {
+    Widget _buildLevelsMenu() {
     return Column(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -1210,17 +1192,26 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           padding: EdgeInsets.only(top: 20.0),
           child: Text('Выбор уровня', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
         ),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            _buildLevelCard(1, 'Start Level', _maxProgress, _attempts1, _savedMedals1, const Color(0xFF3B82F6)),
-            const SizedBox(width: 15),
-            _buildLevelCard(2, 'NOT BAD', _maxProgress2, _attempts2, _savedMedals2, const Color(0xFFA855F7)),
-            const SizedBox(width: 15),
-            _buildLevelCard(3, 'TRY AND CRY', _maxProgress3, _attempts3, _savedMedals3, const Color(0xFFEF4444)),
-            const SizedBox(width: 15),
-            _buildLevelCard(4, 'SPACE SHIFT', _maxProgress4, _attempts4, _savedMedals4, const Color(0xFFFACC15)),
-          ],
+        // ИСПРАВЛЕНИЕ: Добавлен горизонтальный скролл с центрированием для защиты от Overflow
+        Expanded(
+          child: Center(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 30),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _buildLevelCard(1, 'Start Level', _maxProgress, _attempts1, _savedMedals1, const Color(0xFF3B82F6)),
+                  const SizedBox(width: 15),
+                  _buildLevelCard(2, 'NOT BAD', _maxProgress2, _attempts2, _savedMedals2, const Color(0xFFA855F7)),
+                  const SizedBox(width: 15),
+                  _buildLevelCard(3, 'TRY AND CRY', _maxProgress3, _attempts3, _savedMedals3, const Color(0xFFEF4444)),
+                  const SizedBox(width: 15),
+                  _buildLevelCard(4, 'SPACE SHIFT', _maxProgress4, _attempts4, _savedMedals4, const Color(0xFFFACC15)),
+                ],
+              ),
+            ),
+          ),
         ),
         Padding(
           padding: const EdgeInsets.only(bottom: 20.0),
@@ -1231,6 +1222,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       ],
     );
   }
+
 
     Widget _buildLevelCard(int lvl, String name, int progress, int attempts, List<bool> medals, Color borderColor) {
     return GestureDetector(
@@ -1340,19 +1332,20 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildGameplay() {
+    Widget _buildGameplay() {
     return Listener(
+      // ИСПРАВЛЕНИЕ: Убран setState(). Переменная меняется в памяти мгновенно, не тормозя отрисовку!
       onPointerDown: (_) {
-        setState(() {
-          if (!_isPressing) _checkOrbActivation();
-          _isPressing = true;
-        });
+        if (_isPaused || !_isPlaying) return; // Блокировка нажатия во время паузы
+        if (!_isPressing) _checkOrbActivation();
+        _isPressing = true;
       },
-      onPointerUp: (_) => setState(() { _isPressing = false; }),
+      onPointerUp: (_) {
+        _isPressing = false;
+      },
       child: Stack(
         children: [
-                    Positioned.fill(
-            // ИСПРАВЛЕНИЕ: Перерисовывается СТРОГО холст, не затрагивая оверлеи интерфейса
+          Positioned.fill(
             child: ValueListenableBuilder<int>(
               valueListenable: _gameTickNotifier,
               builder: (context, tick, child) {
@@ -1415,6 +1408,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               onPressed: () {
                 setState(() {
                   _isPaused = true;
+                  _isPressing = false; // ИСПРАВЛЕНИЕ: Сбрасываем флаг, убирая "призрачный прыжок"
                   _stopAllLevelTracks();
                 });
               },
@@ -1427,6 +1421,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       ),
     );
   }
+
 
   Widget _buildPauseOverlay() {
     int currentRecord = _currentLevel == 1 
