@@ -146,6 +146,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   bool _isGravityInverted = false;
   List<int> _collectedThisRun = [];
   int _currentProgress = 0;
+  int _spaceTimeCounter = 0; // Счетчик кадров для 3-секундного таймера в космосе
   bool _isPressing = false;
 
   bool _showNewRecord = false;
@@ -523,18 +524,15 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             continue;
           }
 
-                    // МЕДАЛЬ №3 (67%): СЕКРЕТНАЯ МОНЕТА В ИНВЕРТИРОВАННОЙ ПРОПАСТИ НАВЕРХУ
+                    // МЕДАЛЬ №3 (67%): СКРЫТАЯ МОНЕТА В ИНВЕРТИРОВАННОЙ ПРОПАСТИ НАВЕРХУ
           if (progressPct >= 66.5 && progressPct <= 68.5 && !spawnedMedal3Obstacle) {
             double m3X = nextX;
             
-            // Платформа-потолок, с которой игрок должен спрыгнуть/упасть «в пропасть»
+            // Стартовая платформа-потолок
             _obstacles.add(Obstacle(type: 'platform', x: m3X, y: 100, w: 150, h: 40));
             
-            // ИСПРАВЛЕНИЕ: Переместили монетку на самый верх (Y = 40), прямо над пропастью инверсии
-            _medals.add(Medal(id: 2, x: m3X + 265, y: 40)); 
-            
-            // Спасительная платформа на потолке, которая ловит игрока после сбора монетки
-            _obstacles.add(Obstacle(type: 'platform', x: m3X + 200, y: 80, w: 130, h: 40));
+            // ИСПРАВЛЕНИЕ: Подняли на Y = -10. Монетка скрыта наполовину, но доступна для сбора!
+            _medals.add(Medal(id: 2, x: m3X + 265, y: -10)); 
 
             // Орб для прыжка обратно в коридор
             _orbs.add(GameOrb(x: m3X + 265, y: 160, collected: false));
@@ -544,6 +542,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             spawnedMedal3Obstacle = true;
             continue;
           }
+
 
 
           // Обычный рандом внутри инверсии (УДАЛЕНЫ любые скрытые/случайные спавны медалей!)
@@ -776,22 +775,23 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         if (_player.vy < -14) _player.vy = -14;
         _player.y += _player.vy;
 
-        // ИСПРАВЛЕНИЕ: Полностью переписанная, рабочая зона бессмертия (64% - 69%)
-        if (progressPct >= 64.0 && progressPct <= 69.0) {
-          // В этом диапазоне куб может улетать выше экрана (Y <= 10) и падать вниз без смерти
-          if (_player.y < -100) {
-            _player.y = -100; // Ограничиваем, чтобы куб не улетел слишком далеко в космос
-            _player.vy = 0;
-            _player.isGrounded = true; // Считаем, что он «встал» на невидимый потолок секретки
+        // ИСПРАВЛЕНИЕ: Таймер на 3 секунды (180 тиков движка) при вылете наверх
+        if (_player.y < 0) {
+          _spaceTimeCounter++;
+          if (_spaceTimeCounter > 180 && !_isGodMode) { // 180 кадров = 3 секунды
+            _spaceTimeCounter = 0;
+            _gameOver();
+            return;
           }
-        } 
-        else {
-          // ОБЫЧНАЯ ЗОНА ИНВЕРСИИ: Вылет за верхнюю границу экрана (Y <= 5) означает смерть
-          if (_player.y <= 5 && !wasGrounded && !_isGodMode && _player.vy < 0) { 
-            _gameOver(); 
-            return; 
-          }
-        } 
+        } else {
+          _spaceTimeCounter = 0; // Сбрасываем счетчик, если игрок вернулся на экран
+        }
+
+        // Обычная смерть при падении под текстуры потолка (на всякий случай)
+        if (_player.y > _gameHeight && !_isGodMode) {
+          _gameOver();
+          return;
+        }
       } 
       else {
         _player.vy += _player.gravity;
@@ -802,9 +802,11 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           _player.vy = 0;
           _player.isGrounded = true;
         }
+        _spaceTimeCounter = 0;
       } 
     } 
     else {
+      // Логика 1, 2 и 3 уровней...
       if (_player.isShip) {
         if (_isPressing) _player.vy -= 0.9; else _player.vy += 0.7;
         _player.vy = _player.vy.clamp(-8, 8);
@@ -820,9 +822,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         _player.vy = 0;
         _player.isGrounded = true;
       }
+      _spaceTimeCounter = 0;
     } 
 
-    // --- ЭТАП 3: РАСЧЕТ КОЛЛИЗИЙ ---
+    // --- РАСЧЕТ КОЛЛИЗИЙ ---
     _currentProgress = (progressPct.clamp(0, 100)).floor();
 
     for (var m in _medals) {
@@ -838,13 +841,12 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       }
     }
 
-    // Коллизии: Шипы
+    // Шипы
     for (var obs in _obstacles) {
       if (obs.type != 'spike') continue; 
       if (obs.x < _player.x - 50 || obs.x > _player.x + 800) continue;
 
       bool isSpikeUpsideDown = (obs.y < 200);
-      // ИСПРАВЛЕНИЕ: Сделали более точные, сбалансированные хитбоксы для шипов
       if (_player.x + _player.size > obs.x + 6 && _player.x < obs.x + 24) {
         if (!isSpikeUpsideDown) {
           if (_player.y + _player.size > obs.y - 35 && _player.y < obs.y) {
@@ -858,10 +860,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       }
     }
 
-    // Коллизии: Платформы
+    // Платформы
     for (var obs in _obstacles) {
       if (obs.type != 'platform') continue; 
-      // ИСПРАВЛЕНИЕ: Теперь проверяется obs.x + obs.w (конец блока), длинные платформы больше не исчезают!
+      // ИСПРАВЛЕНИЕ БАГА: Теперь проверяется obs.x + obs.w. Длинные платформы больше не исчезают!
       if (obs.x + obs.w < _player.x - 100 || obs.x > _player.x + 800) continue;
 
       bool stoodOnPlatform = false;
@@ -896,7 +898,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       }
     }
 
-    // --- ЭТАП 4: ВРАЩЕНИЕ КУБА В ВОЗДУХЕ ---
+    // Вращение куба в воздухе...
     if (_currentLevel == 4) {
       if (!_player.isGrounded) {
         _player.rotation += _isGravityInverted ? -0.08 : 0.08;
@@ -993,7 +995,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         });
       }
     }
-  if (_player.y > _gameHeight || (_player.y < 0 && (progressPct < 64.0 || progressPct > 69.0))) {
+  if (_player.y > _gameHeight) {
       if (!_isGodMode) { _gameOver(); return; }
     }
   }
@@ -1184,7 +1186,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
 
-    Widget _buildLevelsMenu() {
+      Widget _buildLevelsMenu() {
     return Column(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -1192,26 +1194,17 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           padding: EdgeInsets.only(top: 20.0),
           child: Text('Выбор уровня', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
         ),
-        // ИСПРАВЛЕНИЕ: Добавлен горизонтальный скролл с центрированием для защиты от Overflow
-        Expanded(
-          child: Center(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 30),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  _buildLevelCard(1, 'Start Level', _maxProgress, _attempts1, _savedMedals1, const Color(0xFF3B82F6)),
-                  const SizedBox(width: 15),
-                  _buildLevelCard(2, 'NOT BAD', _maxProgress2, _attempts2, _savedMedals2, const Color(0xFFA855F7)),
-                  const SizedBox(width: 15),
-                  _buildLevelCard(3, 'TRY AND CRY', _maxProgress3, _attempts3, _savedMedals3, const Color(0xFFEF4444)),
-                  const SizedBox(width: 15),
-                  _buildLevelCard(4, 'SPACE SHIFT', _maxProgress4, _attempts4, _savedMedals4, const Color(0xFFFACC15)),
-                ],
-              ),
-            ),
-          ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _buildLevelCard(1, 'Start Level', _maxProgress, _attempts1, _savedMedals1, const Color(0xFF3B82F6)),
+            const SizedBox(width: 15),
+            _buildLevelCard(2, 'NOT BAD', _maxProgress2, _attempts2, _savedMedals2, const Color(0xFFA855F7)),
+            const SizedBox(width: 15),
+            _buildLevelCard(3, 'TRY AND CRY', _maxProgress3, _attempts3, _savedMedals3, const Color(0xFFEF4444)),
+            const SizedBox(width: 15),
+            _buildLevelCard(4, 'SPACE SHIFT', _maxProgress4, _attempts4, _savedMedals4, const Color(0xFFFACC15)),
+          ],
         ),
         Padding(
           padding: const EdgeInsets.only(bottom: 20.0),
@@ -1223,8 +1216,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
 
-
-    Widget _buildLevelCard(int lvl, String name, int progress, int attempts, List<bool> medals, Color borderColor) {
+  Widget _buildLevelCard(int lvl, String name, int progress, int attempts, List<bool> medals, Color borderColor) {
     return GestureDetector(
       onTap: () {
         _currentLevel = lvl;
@@ -1276,6 +1268,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       ),
     );
   }
+
 
   Widget _buildSettingsMenu() {
     return Center(
