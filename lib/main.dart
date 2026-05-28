@@ -596,8 +596,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             // Платформа после шипов, куда приземляется игрок
             _obstacles.add(Obstacle(type: 'platform', x: startX + 380, y: _floorY - 60, w: 110, h: 60));
             
-            // МОНЕТКА: На пике прыжка от третьей сферы (правее и выше неё)
-            _medals.add(Medal(id: 0, x: startX + 410, y: _floorY - 370)); 
+            // ИСПРАВЛЕНИЕ: Монетка находится на уровне и прям чуть выше третьей сферы (на 20px выше)
+            _medals.add(Medal(id: 0, x: startX + 310, y: _floorY - 280));  
             
             // Безопасный отступ в 900 пикселей, чтобы игрок не умер сразу после забора
             nextX = startX + 380 + 110 + 900; 
