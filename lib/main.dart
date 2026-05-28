@@ -490,6 +490,41 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
       while (nextX < _levelLength - 1000) {
         double progressPct = (nextX / _levelLength) * 100;
+
+        // ======================================================================
+        // НОВОЕ УНИКАЛЬНОЕ ПРЕПЯТСТВИЕ С ТРЕМЯ СФЕРАМИ И МЕДАЛЬЮ №1 (СТРОГО ОДИН РАЗ)
+        // ======================================================================
+        if (progressPct >= 27.5 && progressPct <= 29.5 && !spawnedMedal1Obstacle) {
+          double startX = nextX;
+          
+          // 1. Длинная наземная платформа-основание
+          _obstacles.add(Obstacle(type: 'platform', x: startX, y: _floorY - 40, w: 360, h: 40));
+          
+          // 2. Ряд опасных шипов, которые стоят на этой платформе
+          for (int i = 0; i < 12; i++) {
+            _obstacles.add(Obstacle(type: 'spike', x: startX + (i * 30), y: _floorY - 40));
+          }
+          
+          // 3. СФЕРА 1: Стартовая (висит над началом шипов)
+          _orbs.add(GameOrb(x: startX + 60, y: _floorY - 120, collected: false));
+          
+          // 4. СФЕРА 2: Выше и правее (находится на траектории прыжка от первой)
+          _orbs.add(GameOrb(x: startX + 180, y: _floorY - 200, collected: false));
+          
+          // 5. СФЕРА 3 (УНИКАЛЬНАЯ): Ещё выше и правее, прямо перед концом препятствия
+          _orbs.add(GameOrb(x: startX + 300, y: _floorY - 280, collected: false));
+          
+          // 6. НЕБОЛЬШАЯ ПЛАТФОРМА после шипов, куда кубик приземляется после цепочки сфер
+          _obstacles.add(Obstacle(type: 'platform', x: startX + 380, y: _floorY - 60, w: 100, h: 60));
+          
+          // 7. МЕДАЛЬ №1 (ID: 0): Висит на пике траектории от 3-й сферы — выше и правее неё (над платформой)
+          _medals.add(Medal(id: 0, x: startX + 430, y: _floorY - 380)); 
+          
+          // 8. НАСТРОЙКА: Огромная пустая прямая (900px) после препятствия, чтобы игрок успел среагировать
+          nextX = startX + 380 + 100 + 900; 
+          spawnedMedal1Obstacle = true;
+          continue; // Переходим к следующему шагу генерации, пропуская случайные объекты
+        }
         bool isGravityZone = progressPct >= 35 && progressPct <= 70;
 
         // --- ЗОНА ИНВЕРСИИ ГРАВИТАЦИИ (35% - 70%) ---
@@ -570,39 +605,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           if (progressPct > 70 && !safeGapSpawned) {
             nextX = portalOutX + 600;
             safeGapSpawned = true;
-            continue;
-          }
-
-                    // МЕДАЛЬ №1 (28%): УНИКАЛЬНОЕ ХАРДКОРНОЕ ПРЕПЯТСТВИЕ С ТРЕМЯ СФЕРАМИ
-          if (progressPct >= 27.5 && progressPct <= 29.5 && !spawnedMedal1Obstacle) {
-            double startX = nextX;
-            
-            // Наземная платформа-основание
-            _obstacles.add(Obstacle(type: 'platform', x: startX, y: _floorY - 60, w: 300, h: 60));
-            
-            // Ряд опасных шипов под первыми сферами
-            for (int i = 0; i < 10; i++) {
-              _obstacles.add(Obstacle(type: 'spike', x: startX + (i * 30), y: _floorY - 60));
-            }
-            
-            // СФЕРА 1: Стандартная стартовая
-            _orbs.add(GameOrb(x: startX + 60, y: _floorY - 140, collected: false));
-            
-            // СФЕРА 2: Выше и правее первой
-            _orbs.add(GameOrb(x: startX + 180, y: _floorY - 220, collected: false));
-            
-            // СФЕРА 3 (НОВАЯ): Ещё выше и правее, отправляет игрока на пик траектории
-            _orbs.add(GameOrb(x: startX + 300, y: _floorY - 300, collected: false));
-            
-            // НЕБОЛЬШАЯ ПЛАТФОРМА после шипов, куда приземляется игрок
-            _obstacles.add(Obstacle(type: 'platform', x: startX + 350, y: _floorY - 80, w: 120, h: 80));
-            
-            // МОНЕТКА №1 (ID: 0): Находится на пике прыжка от 3-й сферы, правее и выше неё
-            _medals.add(Medal(id: 0, x: startX + 410, y: _floorY - 410)); 
-            
-            // НАСТРОЙКА: Огромный безопасный отступ (900 пикселей) до следующего объекта
-            nextX += 350 + 120 + 900; 
-            spawnedMedal1Obstacle = true;
             continue;
           }
 
