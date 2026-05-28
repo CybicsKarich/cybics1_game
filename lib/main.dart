@@ -573,25 +573,39 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             continue;
           }
 
-          // МЕДАЛЬ №1 (28%): НАШЕ ИСПРАВЛЕННОЕ СТАБИЛЬНОЕ ПРЕПЯТСТВИЕ С МОНЕТОЙ (ID: 0)
+                    // МЕДАЛЬ №1 (28%): УНИКАЛЬНОЕ ХАРДКОРНОЕ ПРЕПЯТСТВИЕ С ТРЕМЯ СФЕРАМИ
           if (progressPct >= 27.5 && progressPct <= 29.5 && !spawnedMedal1Obstacle) {
             double startX = nextX;
-            double platW = 210;
             
-            _obstacles.add(Obstacle(type: 'platform', x: startX, y: _floorY - 80, w: platW, h: 80));
-            for (int i = 0; i < 7; i++) {
-              _obstacles.add(Obstacle(type: 'spike', x: startX + (i * 30), y: _floorY - 80));
+            // Наземная платформа-основание
+            _obstacles.add(Obstacle(type: 'platform', x: startX, y: _floorY - 60, w: 300, h: 60));
+            
+            // Ряд опасных шипов под первыми сферами
+            for (int i = 0; i < 10; i++) {
+              _obstacles.add(Obstacle(type: 'spike', x: startX + (i * 30), y: _floorY - 60));
             }
             
-            _orbs.add(GameOrb(x: startX + 105, y: _floorY - 170, collected: false));
+            // СФЕРА 1: Стандартная стартовая
+            _orbs.add(GameOrb(x: startX + 60, y: _floorY - 140, collected: false));
             
-            // Честный спавн первой монеты (ID: 0), теперь работает без конфликтов!
-            _medals.add(Medal(id: 0, x: startX + 240, y: _floorY - 230)); 
+            // СФЕРА 2: Выше и правее первой
+            _orbs.add(GameOrb(x: startX + 180, y: _floorY - 220, collected: false));
             
-            nextX += platW + 150; 
+            // СФЕРА 3 (НОВАЯ): Ещё выше и правее, отправляет игрока на пик траектории
+            _orbs.add(GameOrb(x: startX + 300, y: _floorY - 300, collected: false));
+            
+            // НЕБОЛЬШАЯ ПЛАТФОРМА после шипов, куда приземляется игрок
+            _obstacles.add(Obstacle(type: 'platform', x: startX + 350, y: _floorY - 80, w: 120, h: 80));
+            
+            // МОНЕТКА №1 (ID: 0): Находится на пике прыжка от 3-й сферы, правее и выше неё
+            _medals.add(Medal(id: 0, x: startX + 410, y: _floorY - 410)); 
+            
+            // НАСТРОЙКА: Огромный безопасный отступ (900 пикселей) до следующего объекта
+            nextX += 350 + 120 + 900; 
             spawnedMedal1Obstacle = true;
             continue;
           }
+
 
           double r = _seededRandom(seed++);
           if (r < 0.35) {
@@ -654,6 +668,11 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       _collectedThisRun.clear();
       _showVictory = false;
       _showNewRecord = false;
+
+      // ИСПРАВЛЕНИЕ: Сбрасываем статус сбора монет на карте
+      for (var m in _medals) {
+        m.collected = false;
+      }
       
       _orbs.clear();
       _orbSpinAngle = 0;
@@ -1019,19 +1038,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       _maxProgress4 = _currentProgress; _prefs.setInt('cybics_max_progress_4', _maxProgress4); isNewRecord = true;
     }
 
-    // ИСПРАВЛЕНИЕ: Сохраняем медали ОДИН РАЗ здесь, а не внутри анимационного таймера
-    for (var id in _collectedThisRun) {
-      if (_currentLevel == 1 && id < _savedMedals1.length) _savedMedals1[id] = true;
-      if (_currentLevel == 2 && id < _savedMedals2.length) _savedMedals2[id] = true;
-      if (_currentLevel == 3 && id < _savedMedals3.length) _savedMedals3[id] = true;
-      if (_currentLevel == 4 && id < _savedMedals4.length) _savedMedals4[id] = true;
-    }
-    _collectedThisRun.clear();
-
-    _prefs.setString('cybics_medals_1', jsonEncode(_savedMedals1));
-    _prefs.setString('cybics_medals_2', jsonEncode(_savedMedals2));
-    _prefs.setString('cybics_medals_3', jsonEncode(_savedMedals3));
-    _prefs.setString('cybics_medals_4', jsonEncode(_savedMedals4));
+    _collectedThisRun.clear(); // Монеты сгорают при смерти!
 
     if (!mounted) return; 
     setState(() {
