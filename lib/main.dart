@@ -1538,7 +1538,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   }
 
 
-    Widget _buildBtn(String text, VoidCallback onPressed, {bool isSecondary = false, double minWidth = 250}) {
+      // ИСПРАВЛЕНИЕ: Добавили знак вопроса к VoidCallback?, чтобы кнопка могла принимать null
+  Widget _buildBtn(String text, VoidCallback? onPressed, {bool isSecondary = false, double minWidth = 250}) {
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 6),
       width: minWidth,
@@ -1546,10 +1547,14 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(25),
         gradient: isSecondary ? null : const LinearGradient(colors: [Color(0xFF3B82F6), Color(0xFF06B6D4)]),
-        color: isSecondary ? const Color(0xFF334155) : null,
+        // ИСПРАВЛЕНИЕ: Если кнопка заблокирована (onPressed == null), делаем её серой
+        color: onPressed == null ? const Color(0xFF1E293B) : (isSecondary ? const Color(0xFF334155) : null),
         boxShadow: [
           BoxShadow(
-            color: isSecondary ? Colors.black.withOpacity(0.25) : const Color(0xFF06B6D4).withOpacity(0.3),
+            // Если кнопка заблокирована, убираем яркое неоновое свечение
+            color: onPressed == null 
+                ? Colors.transparent 
+                : (isSecondary ? Colors.black.withOpacity(0.25) : const Color(0xFF06B6D4).withOpacity(0.3)),
             blurRadius: 10,
             offset: const Offset(0, 5),
           )
@@ -1560,12 +1565,15 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           backgroundColor: Colors.transparent,
           shadowColor: Colors.transparent,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+          // ИСПРАВЛЕНИЕ: Если кнопка отключена, Flutter сам применит к тексту полупрозрачный цвет
+          disabledForegroundColor: Colors.white38, 
         ),
-        onPressed: onPressed,
+        onPressed: onPressed, // Сюда теперь безопасно прилетит null
         child: Text(text, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
       ),
     );
   }
+
 
   @override
   void dispose() {
