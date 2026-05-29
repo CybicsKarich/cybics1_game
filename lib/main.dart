@@ -1332,64 +1332,66 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
 
-    // ЭКРАН 1: Поле ввода названия или номера уровня
-  Widget _buildSearchMenu() {
+   Widget _buildSearchMenu() {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Text(
-            'Поиск уровней', 
-            style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, letterSpacing: 1.5)
-          ),
-          const SizedBox(height: 25),
-          
-          // Поле ввода TextField
-          SizedBox(
-            width: 400,
-            child: TextField(
-              controller: _searchController,
-              autofocus: false, // Клавиатура откроется при тапе на поле
-              style: const TextStyle(color: Colors.white, fontSize: 18),
-              textAlign: TextAlign.center,
-              decoration: InputDecoration(
-                hintText: 'название или номер уровня',
-                hintStyle: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 16), // Полупрозрачные белые буквы
-                filled: true,
-                fillColor: const Color(0xFF1E293B),
-                contentPadding: const EdgeInsets.symmetric(vertical: 15),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(25),
-                  borderSide: const BorderSide(color: Color(0xFF334155), width: 1.5),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(25),
-                  borderSide: const BorderSide(color: Color(0xFF06B6D4), width: 2), // Подсветка при вводе
+      // ИСПРАВЛЕНИЕ: Обернули в SingleChildScrollView. Ошибка "bottom overflowed" полностью исчезнет!
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text(
+              'Поиск уровней', 
+              style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, letterSpacing: 1.5)
+            ),
+            const SizedBox(height: 25),
+            
+            SizedBox(
+              width: 400,
+              child: TextField(
+                controller: _searchController,
+                autofocus: false, 
+                maxLength: 50, // ИСПРАВЛЕНИЕ: Максимально можно набрать 50 символов
+                style: const TextStyle(color: Colors.white, fontSize: 18),
+                textAlign: TextAlign.center,
+                decoration: InputDecoration(
+                  counterText: "", // Скрываем некрасивый стандартный счетчик под полем ввода
+                  hintText: 'название или номер уровня',
+                  hintStyle: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 16), 
+                  filled: true,
+                  fillColor: const Color(0xFF1E293B),
+                  contentPadding: const EdgeInsets.symmetric(vertical: 15),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(25),
+                    borderSide: const BorderSide(color: Color(0xFF334155), width: 1.5),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(25),
+                    borderSide: const BorderSide(color: Color(0xFF06B6D4), width: 2), 
+                  ),
                 ),
               ),
             ),
-          ),
-          
-          const SizedBox(height: 20),
-          
-          // Кнопка Найти
-          _buildBtn('Найти', () {
-            // Закрываем системную клавиатуру при нажатии кнопки поиска
-            FocusScope.of(context).unfocus();
-            setState(() { _state = GameState.searchResultsMenu; });
-          }),
-          
-          const SizedBox(height: 10),
-          
-          // Кнопка Назад (возврат в "Другие уровни")
-          _buildBtn('Назад', () {
-            FocusScope.of(context).unfocus();
-            setState(() { _state = GameState.customLevelsMenu; });
-          }, isSecondary: true, minWidth: 180),
-        ],
+            
+            const SizedBox(height: 20),
+            
+            _buildBtn('Найти', () {
+              FocusScope.of(context).unfocus();
+              setState(() { _state = GameState.searchResultsMenu; });
+            }),
+            
+            const SizedBox(height: 10),
+            
+            _buildBtn('Назад', () {
+              FocusScope.of(context).unfocus();
+              setState(() { _state = GameState.customLevelsMenu; });
+            }, isSecondary: true, minWidth: 180),
+          ],
+        ),
       ),
     );
   }
+
 
   // ЭКРАН 2: Большой квадрат результатов "Уровней не найдено"
   Widget _buildSearchResultsMenu() {
@@ -1432,7 +1434,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildCustomLevelsMenu() {
+    Widget _buildCustomLevelsMenu() {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -1441,17 +1443,17 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             'Другие уровни', 
             style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold, letterSpacing: 2)
           ),
-          const SizedBox(height: 30),
+          const SizedBox(height: 25),
           
           _buildBtn('Созданные уровни', null, isSecondary: true),
           
-          // ИСПРАВЛЕНИЕ: Обернули в яркую зелёную обертку со свечением
+          // Зелёная кнопка скачанных
           Container(
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(25),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF22C55E).withOpacity(0.4), // Зелёное свечение
+                  color: const Color(0xFF22C55E).withOpacity(0.4),
                   blurRadius: 15,
                   offset: const Offset(0, 4),
                 )
@@ -1462,13 +1464,25 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             }, minWidth: 250),
           ),
           
-          const SizedBox(height: 12), // Небольшой отступ
+          const SizedBox(height: 12),
           
-          // ИСПРАВЛЕНИЕ: Кнопка поиска теперь активна и ведет в меню ввода
-          _buildBtn('Поиск уровней', () {
-            _searchController.clear(); // Очищаем поле при каждом входе
-            setState(() { _state = GameState.searchMenu; });
-          }, isSecondary: true),
+          // ИСПРАВЛЕНИЕ: Обернули кнопку поиска в ЖЁЛТОЕ неоновое свечение
+          Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(25),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFFACC15).withOpacity(0.4), // Жёлтый неон
+                  blurRadius: 15,
+                  offset: const Offset(0, 4),
+                )
+              ],
+            ),
+            child: _buildBtn('Поиск уровней', () {
+              _searchController.clear();
+              setState(() { _state = GameState.searchMenu; });
+            }, minWidth: 250),
+          ),
           
           const SizedBox(height: 25),
           
@@ -1479,6 +1493,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       ),
     );
   }
+
 
   Widget _buildSettingsMenu() {
     return Center(
@@ -1713,14 +1728,16 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       margin: const EdgeInsets.symmetric(vertical: 6),
       width: minWidth,
       height: 50,
-            decoration: BoxDecoration(
+      decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(25),
-        // ИСПРАВЛЕНИЕ: Динамический цвет. Если это кнопка скачанных — красим в зелёный градиент!
+        // ИСПРАВЛЕНИЕ: Добавлен жёлтый градиент для кнопки поиска (0xFFFACC15 и 0xFFEAB308)
         gradient: isSecondary 
             ? null 
             : (text.contains('Скачанные') 
                 ? const LinearGradient(colors: [Color(0xFF22C55E), Color(0xFF10B981)]) 
-                : const LinearGradient(colors: [Color(0xFF3B82F6), Color(0xFF06B6D4)])),
+                : (text.contains('Поиск') 
+                    ? const LinearGradient(colors: [Color(0xFFFACC15), Color(0xFFEAB308)])
+                    : const LinearGradient(colors: [Color(0xFF3B82F6), Color(0xFF06B6D4)]))),
         color: onPressed == null ? const Color(0xFF1E293B) : (isSecondary ? const Color(0xFF334155) : null),
         boxShadow: [
           BoxShadow(
@@ -1730,7 +1747,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                     ? Colors.black.withOpacity(0.25) 
                     : (text.contains('Скачанные') 
                         ? const Color(0xFF10B981).withOpacity(0.4) 
-                        : const Color(0xFF06B6D4).withOpacity(0.3))),
+                        : (text.contains('Поиск')
+                            ? const Color(0xFFEAB308).withOpacity(0.4)
+                            : const Color(0xFF06B6D4).withOpacity(0.3)))),
             blurRadius: 10,
             offset: const Offset(0, 5),
           )
