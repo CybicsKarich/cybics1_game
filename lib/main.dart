@@ -29,7 +29,7 @@ class CybicsApp extends StatelessWidget {
   }
 }
 
-enum GameState { mainMenu, levelsMenu, settingsMenu, gameplay, customLevelsMenu, downloadedLevelsMenu }
+enum GameState { mainMenu, levelsMenu, settingsMenu, gameplay, customLevelsMenu, downloadedLevelsMenu, searchMenu, searchResultsMenu }
 
 class Obstacle {
   final String type;
@@ -147,6 +147,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   List<int> _collectedThisRun = [];
   int _currentProgress = 0;
   int _spaceTimeCounter = 0; // Счетчик кадров для 3-секундного таймера в космосе
+  final TextEditingController _searchController = TextEditingController(); // Контроллер для поля поиска
   bool _isPressing = false;
 
   bool _showNewRecord = false;
@@ -1149,6 +1150,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       // Перенаправляем на новое меню скачанных карт
       case GameState.downloadedLevelsMenu:
         return _buildDownloadedLevelsMenu();
+      case GameState.searchMenu:
+        return _buildSearchMenu();
+      case GameState.searchResultsMenu:
+        return _buildSearchResultsMenu();
     }
   }
 
@@ -1327,6 +1332,106 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
 
+    // ЭКРАН 1: Поле ввода названия или номера уровня
+  Widget _buildSearchMenu() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Text(
+            'Поиск уровней', 
+            style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, letterSpacing: 1.5)
+          ),
+          const SizedBox(height: 25),
+          
+          // Поле ввода TextField
+          SizedBox(
+            width: 400,
+            child: TextField(
+              controller: _searchController,
+              autofocus: false, // Клавиатура откроется при тапе на поле
+              style: const TextStyle(color: Colors.white, fontSize: 18),
+              textAlign: TextAlign.center,
+              decoration: InputDecoration(
+                hintText: 'название или номер уровня',
+                hintStyle: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 16), // Полупрозрачные белые буквы
+                filled: true,
+                fillColor: const Color(0xFF1E293B),
+                contentPadding: const EdgeInsets.symmetric(vertical: 15),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(25),
+                  borderSide: const BorderSide(color: Color(0xFF334155), width: 1.5),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(25),
+                  borderSide: const BorderSide(color: Color(0xFF06B6D4), width: 2), // Подсветка при вводе
+                ),
+              ),
+            ),
+          ),
+          
+          const SizedBox(height: 20),
+          
+          // Кнопка Найти
+          _buildBtn('Найти', () {
+            // Закрываем системную клавиатуру при нажатии кнопки поиска
+            FocusScope.of(context).unfocus();
+            setState(() { _state = GameState.searchResultsMenu; });
+          }),
+          
+          const SizedBox(height: 10),
+          
+          // Кнопка Назад (возврат в "Другие уровни")
+          _buildBtn('Назад', () {
+            FocusScope.of(context).unfocus();
+            setState(() { _state = GameState.customLevelsMenu; });
+          }, isSecondary: true, minWidth: 180),
+        ],
+      ),
+    );
+  }
+
+  // ЭКРАН 2: Большой квадрат результатов "Уровней не найдено"
+  Widget _buildSearchResultsMenu() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const SizedBox(height: 15),
+          Text(
+            'Результаты для: "${_searchController.text}"', 
+            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.grey)
+          ),
+          const SizedBox(height: 15),
+          
+          // Большой квадрат, такой же как в скачанных уровнях
+          Container(
+            width: 450,
+            height: 220,
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E293B),
+              border: Border.all(color: const Color(0xFF06B6D4), width: 2),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Center(
+              child: Text(
+                'Уровней не найдено', 
+                style: TextStyle(fontSize: 16, color: Colors.grey, fontWeight: FontWeight.w500)
+              ),
+            ),
+          ),
+          
+          const SizedBox(height: 15),
+          
+          // Кнопка Назад (возвращает обратно в меню ввода, сохраняя текст)
+          _buildBtn('Назад', () {
+            setState(() { _state = GameState.searchMenu; });
+          }, minWidth: 180),
+        ],
+      ),
+    );
+  }
+
   Widget _buildCustomLevelsMenu() {
     return Center(
       child: Column(
@@ -1338,17 +1443,35 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           ),
           const SizedBox(height: 30),
           
-          // Три кнопки, которые пока заблокированы (onPressed: null делает кнопку неактивной)
           _buildBtn('Созданные уровни', null, isSecondary: true),
-                    // ИСПРАВЛЕНИЕ: Кнопка стала активной и переводит на новый экран
-          _buildBtn('Скачанные уровни', () {
-            setState(() { _state = GameState.downloadedLevelsMenu; });
+          
+          // ИСПРАВЛЕНИЕ: Обернули в яркую зелёную обертку со свечением
+          Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(25),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF22C55E).withOpacity(0.4), // Зелёное свечение
+                  blurRadius: 15,
+                  offset: const Offset(0, 4),
+                )
+              ],
+            ),
+            child: _buildBtn('Скачанные уровни', () {
+              setState(() { _state = GameState.downloadedLevelsMenu; });
+            }, minWidth: 250),
+          ),
+          
+          const SizedBox(height: 12), // Небольшой отступ
+          
+          // ИСПРАВЛЕНИЕ: Кнопка поиска теперь активна и ведет в меню ввода
+          _buildBtn('Поиск уровней', () {
+            _searchController.clear(); // Очищаем поле при каждом входе
+            setState(() { _state = GameState.searchMenu; });
           }, isSecondary: true),
-          _buildBtn('Поиск уровней', null, isSecondary: true),
           
           const SizedBox(height: 25),
           
-          // Кнопка возврата в главное меню
           _buildBtn('Назад', () {
             setState(() { _state = GameState.mainMenu; });
           }, minWidth: 200),
@@ -1590,17 +1713,24 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       margin: const EdgeInsets.symmetric(vertical: 6),
       width: minWidth,
       height: 50,
-      decoration: BoxDecoration(
+            decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(25),
-        gradient: isSecondary ? null : const LinearGradient(colors: [Color(0xFF3B82F6), Color(0xFF06B6D4)]),
-        // ИСПРАВЛЕНИЕ: Если кнопка заблокирована (onPressed == null), делаем её серой
+        // ИСПРАВЛЕНИЕ: Динамический цвет. Если это кнопка скачанных — красим в зелёный градиент!
+        gradient: isSecondary 
+            ? null 
+            : (text.contains('Скачанные') 
+                ? const LinearGradient(colors: [Color(0xFF22C55E), Color(0xFF10B981)]) 
+                : const LinearGradient(colors: [Color(0xFF3B82F6), Color(0xFF06B6D4)])),
         color: onPressed == null ? const Color(0xFF1E293B) : (isSecondary ? const Color(0xFF334155) : null),
         boxShadow: [
           BoxShadow(
-            // Если кнопка заблокирована, убираем яркое неоновое свечение
             color: onPressed == null 
                 ? Colors.transparent 
-                : (isSecondary ? Colors.black.withOpacity(0.25) : const Color(0xFF06B6D4).withOpacity(0.3)),
+                : (isSecondary 
+                    ? Colors.black.withOpacity(0.25) 
+                    : (text.contains('Скачанные') 
+                        ? const Color(0xFF10B981).withOpacity(0.4) 
+                        : const Color(0xFF06B6D4).withOpacity(0.3))),
             blurRadius: 10,
             offset: const Offset(0, 5),
           )
