@@ -29,7 +29,7 @@ class CybicsApp extends StatelessWidget {
   }
 }
 
-enum GameState { mainMenu, levelsMenu, settingsMenu, gameplay, customLevelsMenu, downloadedLevelsMenu, searchMenu, searchResultsMenu }
+enum GameState { mainMenu, levelsMenu, settingsMenu, gameplay, customLevelsMenu, downloadedLevelsMenu, searchMenu, searchResultsMenu, createdLevelsMenu }
 
 class Obstacle {
   final String type;
@@ -1154,6 +1154,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         return _buildSearchMenu();
       case GameState.searchResultsMenu:
         return _buildSearchResultsMenu();
+      case GameState.createdLevelsMenu:
+        return _buildCreatedLevelsMenu();
     }
   }
 
@@ -1434,7 +1436,59 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
 
-    Widget _buildCustomLevelsMenu() {
+       Widget _buildCreatedLevelsMenu() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const SizedBox(height: 10),
+          const Text(
+            'Созданные уровни', 
+            style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, letterSpacing: 1.5)
+          ),
+          const SizedBox(height: 15),
+          
+          // Используем Row, чтобы расположить большой квадрат и кнопку "Добавить" рядом друг с другом
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Наш большой квадрат по центру
+              Container(
+                width: 420, // Немного сузили (с 450 до 420), чтобы справа идеально встала кнопка
+                height: 220,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E293B),
+                  border: Border.all(color: const Color(0xFF06B6D4), width: 2), // Бирюзовая рамка
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Center(
+                  child: Text(
+                    'Нет созданных уровней', 
+                    style: TextStyle(fontSize: 16, color: Colors.grey, fontWeight: FontWeight.w500)
+                  ),
+                ),
+              ),
+              
+              const SizedBox(width: 20), // Отступ между квадратом и кнопкой
+              
+              // Кнопка "Добавить уровень" (пока не активна, передаем null)
+              _buildBtn('Добавить\nуровень', null, isSecondary: true, minWidth: 140),
+            ],
+          ),
+          
+          const SizedBox(height: 15),
+          
+          // Кнопка возврата в меню "Другие уровни"
+          _buildBtn('Назад', () {
+            setState(() { _state = GameState.customLevelsMenu; });
+          }, minWidth: 180),
+        ],
+      ),
+    );
+  }
+
+   Widget _buildCustomLevelsMenu() {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -1445,7 +1499,24 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           ),
           const SizedBox(height: 25),
           
-          _buildBtn('Созданные уровни', null, isSecondary: true),
+          // ИСПРАВЛЕНИЕ: Обернули кнопку в ФИОЛЕТОВОЕ неоновое свечение (0xFF9333EA)
+          Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(25),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFA855F7).withOpacity(0.4), // Фиолетовый неон
+                  blurRadius: 15,
+                  offset: const Offset(0, 4),
+                )
+              ],
+            ),
+            child: _buildBtn('Созданные уровни', () {
+              setState(() { _state = GameState.createdLevelsMenu; });
+            }, minWidth: 250),
+          ),
+          
+          const SizedBox(height: 12),
           
           // Зелёная кнопка скачанных
           Container(
@@ -1466,13 +1537,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           
           const SizedBox(height: 12),
           
-          // ИСПРАВЛЕНИЕ: Обернули кнопку поиска в ЖЁЛТОЕ неоновое свечение
+          // Жёлтая кнопка поиска
           Container(
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(25),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFFFACC15).withOpacity(0.4), // Жёлтый неон
+                  color: const Color(0xFFFACC15).withOpacity(0.4),
                   blurRadius: 15,
                   offset: const Offset(0, 4),
                 )
