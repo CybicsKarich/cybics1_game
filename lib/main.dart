@@ -29,7 +29,7 @@ class CybicsApp extends StatelessWidget {
   }
 }
 
-enum GameState { mainMenu, levelsMenu, settingsMenu, gameplay, customLevelsMenu }
+enum GameState { mainMenu, levelsMenu, settingsMenu, gameplay, customLevelsMenu, downloadedLevelsMenu }
 
 class Obstacle {
   final String type;
@@ -1134,7 +1134,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
 
-    Widget _buildCurrentScreen() {
+      Widget _buildCurrentScreen() {
     switch (_state) {
       case GameState.mainMenu:
         return _buildMainMenu();
@@ -1144,11 +1144,14 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         return _buildSettingsMenu();
       case GameState.gameplay:
         return _buildGameplay();
-      // Перенаправляем на отрисовку нового меню
       case GameState.customLevelsMenu:
         return _buildCustomLevelsMenu();
+      // Перенаправляем на новое меню скачанных карт
+      case GameState.downloadedLevelsMenu:
+        return _buildDownloadedLevelsMenu();
     }
   }
+
 
 
     Widget _buildMainMenu() {
@@ -1284,6 +1287,46 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
 
+    Widget _buildDownloadedLevelsMenu() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const SizedBox(height: 15),
+          const Text(
+            'Скачанные уровни', 
+            style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, letterSpacing: 1.5)
+          ),
+          const SizedBox(height: 15),
+          
+          // Твой большой квадрат в центре экрана
+          Container(
+            width: 450,
+            height: 220,
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E293B), // Темный фон в стиле карточек
+              border: Border.all(color: const Color(0xFF06B6D4), width: 2), // Бирюзовая неоновая рамка
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Center(
+              child: Text(
+                'Нет скачанных уровней', 
+                style: TextStyle(fontSize: 16, color: Colors.grey, fontWeight: FontWeight.w500)
+              ),
+            ),
+          ),
+          
+          const SizedBox(height: 15),
+          
+          // Кнопка возврата в предыдущее меню "Другие уровни"
+          _buildBtn('Назад', () {
+            setState(() { _state = GameState.customLevelsMenu; });
+          }, minWidth: 180),
+        ],
+      ),
+    );
+  }
+
   Widget _buildCustomLevelsMenu() {
     return Center(
       child: Column(
@@ -1297,7 +1340,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           
           // Три кнопки, которые пока заблокированы (onPressed: null делает кнопку неактивной)
           _buildBtn('Созданные уровни', null, isSecondary: true),
-          _buildBtn('Скачанные уровни', null, isSecondary: true),
+                    // ИСПРАВЛЕНИЕ: Кнопка стала активной и переводит на новый экран
+          _buildBtn('Скачанные уровни', () {
+            setState(() { _state = GameState.downloadedLevelsMenu; });
+          }, isSecondary: true),
           _buildBtn('Поиск уровней', null, isSecondary: true),
           
           const SizedBox(height: 25),
