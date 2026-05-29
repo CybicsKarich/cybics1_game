@@ -29,7 +29,7 @@ class CybicsApp extends StatelessWidget {
   }
 }
 
-enum GameState { mainMenu, levelsMenu, settingsMenu, gameplay }
+enum GameState { mainMenu, levelsMenu, settingsMenu, gameplay, customLevelsMenu }
 
 class Obstacle {
   final String type;
@@ -1134,7 +1134,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildCurrentScreen() {
+    Widget _buildCurrentScreen() {
     switch (_state) {
       case GameState.mainMenu:
         return _buildMainMenu();
@@ -1144,10 +1144,14 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         return _buildSettingsMenu();
       case GameState.gameplay:
         return _buildGameplay();
+      // Перенаправляем на отрисовку нового меню
+      case GameState.customLevelsMenu:
+        return _buildCustomLevelsMenu();
     }
   }
 
-  Widget _buildMainMenu() {
+
+    Widget _buildMainMenu() {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -1184,6 +1188,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           _buildBtn('Играть', () {
             setState(() { _state = GameState.levelsMenu; });
           }),
+          // НАША НОВАЯ КНОПКА: Переводит в меню кастомных уровней
+          _buildBtn('Другие уровни', () {
+            setState(() { _state = GameState.customLevelsMenu; });
+          }),
           _buildBtn('Настройки', () {
             setState(() { _state = GameState.settingsMenu; });
           }, isSecondary: true),
@@ -1191,6 +1199,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       ),
     );
   }
+
 
       Widget _buildLevelsMenu() {
     return Column(
@@ -1275,6 +1284,32 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
 
+  Widget _buildCustomLevelsMenu() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Text(
+            'Другие уровни', 
+            style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold, letterSpacing: 2)
+          ),
+          const SizedBox(height: 30),
+          
+          // Три кнопки, которые пока заблокированы (onPressed: null делает кнопку неактивной)
+          _buildBtn('Созданные уровни', null, isSecondary: true),
+          _buildBtn('Скачанные уровни', null, isSecondary: true),
+          _buildBtn('Поиск уровней', null, isSecondary: true),
+          
+          const SizedBox(height: 25),
+          
+          // Кнопка возврата в главное меню
+          _buildBtn('Назад', () {
+            setState(() { _state = GameState.mainMenu; });
+          }, minWidth: 200),
+        ],
+      ),
+    );
+  }
 
   Widget _buildSettingsMenu() {
     return Center(
