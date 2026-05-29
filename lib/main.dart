@@ -1436,7 +1436,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
 
-       Widget _buildCreatedLevelsMenu() {
+         Widget _buildCreatedLevelsMenu() {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -1448,18 +1448,18 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           ),
           const SizedBox(height: 15),
           
-          // Используем Row, чтобы расположить большой квадрат и кнопку "Добавить" рядом друг с другом
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: MainAxisAlignment.center,
+            // ИСПРАВЛЕНИЕ: Заменили MainAxisAlignment на CrossAxisAlignment
+            crossAxisAlignment: CrossAxisAlignment.center, 
             children: [
               // Наш большой квадрат по центру
               Container(
-                width: 420, // Немного сузили (с 450 до 420), чтобы справа идеально встала кнопка
+                width: 420, 
                 height: 220,
                 decoration: BoxDecoration(
                   color: const Color(0xFF1E293B),
-                  border: Border.all(color: const Color(0xFF06B6D4), width: 2), // Бирюзовая рамка
+                  border: Border.all(color: const Color(0xFF06B6D4), width: 2), 
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: const Center(
@@ -1470,9 +1470,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                 ),
               ),
               
-              const SizedBox(width: 20), // Отступ между квадратом и кнопкой
+              const SizedBox(width: 20), 
               
-              // Кнопка "Добавить уровень" (пока не активна, передаем null)
+              // Кнопка "Добавить уровень"
               _buildBtn('Добавить\nуровень', null, isSecondary: true, minWidth: 140),
             ],
           ),
@@ -1487,6 +1487,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       ),
     );
   }
+
 
    Widget _buildCustomLevelsMenu() {
     return Center(
