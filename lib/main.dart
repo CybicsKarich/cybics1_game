@@ -1788,37 +1788,46 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               }),
             ),
             
-            const SizedBox(height: 25),
+                        const SizedBox(height: 25),
             
-                        // Нижние кнопки Создать и Отмена
+            // ИСПРАВЛЕНИЕ: Теперь здесь ТРИ кнопки в ряд, как ты и просил!
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                _buildBtn('Создать', () {
+                // 1. Кнопка Создать — пока заблокирована (null), в будущем откроет редактор
+                _buildBtn('Создать', null, minWidth: 140), 
+                
+                const SizedBox(width: 15),
+                
+                // 2. Кнопка Сохранить — берет данные, записывает в память и закрывает меню
+                _buildBtn('Сохранить', () {
                   String enteredName = _levelNameController.text.trim();
                   if (enteredName.isEmpty) enteredName = "Без названия";
 
-                  // Генерируем случайный 4-значный ID (номер) уровня для поиска
+                  // Генерируем уникальный 4-значный номер для поиска уровней
                   var rand = math.Random();
                   String generatedId = "#${1000 + rand.nextInt(9000)}";
 
                   setState(() {
-                    // Создаем и добавляем новый уровень в список
+                    // Создаем карточку уровня и добавляем в список сохраненных
                     _myCreatedLevels.add(CustomLevel(
                       id: generatedId,
                       name: enteredName,
                       difficultyIndex: _selectedDifficultyIndex,
                     ));
                     _saveCustomLevelsToPrefs(); // Записываем в SharedPreferences
-                    _state = GameState.createdLevelsMenu; // Переходим обратно
+                    _state = GameState.createdLevelsMenu; // Перекидываем обратно в созданные уровни
                   });
-                  FocusScope.of(context).unfocus();
-                }, minWidth: 160),
-                const SizedBox(width: 20),
+                  FocusScope.of(context).unfocus(); // Прячем клавиатуру
+                }, minWidth: 140),
+                
+                const SizedBox(width: 15),
+                
+                // 3. Кнопка Отмена — просто уводит назад
                 _buildBtn('Отмена', () {
                   FocusScope.of(context).unfocus();
                   setState(() { _state = GameState.createdLevelsMenu; });
-                }, isSecondary: true, minWidth: 160),
+                }, isSecondary: true, minWidth: 140),
               ],
             )
           ],
