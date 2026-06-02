@@ -2130,10 +2130,8 @@ class GamePainter extends CustomPainter {
           canvas.drawPath(spikePath, paint);
           paint.style = PaintingStyle.fill;
 
-          // ИСПРАВЛЕНИЕ: Заменяем тяжелый TextPainter знака (!) на быстрый векторный рисунок
           canvas.save();
-          double time = DateTime.now().millisecondsSinceEpoch * 0.005;
-          double pulse = 1.0 + math.sin(time) * 0.15;
+          double pulse = 1.0 + math.sin(player.x * 0.05) * 0.12;
           double markOffsetY = isSpikeUpsideDown ? 45 : -45;
           canvas.translate(renderX + 15, obs.y + markOffsetY);
           canvas.scale(pulse, pulse);
@@ -2169,7 +2167,6 @@ class GamePainter extends CustomPainter {
         paint.strokeWidth = 3;
         canvas.drawCircle(Offset(renderX, m.y), 18, paint);
         
-        // ИСПРАВЛЕНИЕ: Рисуем внутренний кристалл монеты геометрией холста
         paint.style = PaintingStyle.fill;
         paint.color = Colors.white;
         Path coinSymbol = Path()
@@ -2184,14 +2181,14 @@ class GamePainter extends CustomPainter {
 
     // 5.1 Сферы (Орбы) 4 уровня
     if (currentLevel == 4) {
+      final double orbTime = DateTime.now().millisecondsSinceEpoch * 0.003;
+      final double rotationAngle = orbTime % (math.pi * 2);
+
       for (var orb in orbs) {
         double renderX = orb.x - cameraX;
         if (!orb.collected && renderX > -50 && renderX < (size.width / scale) + 50) {
           canvas.save();
           canvas.translate(renderX, orb.y);
-          
-          double time = DateTime.now().millisecondsSinceEpoch * 0.003;
-          double rotationAngle = time % (math.pi * 2);
           canvas.rotate(rotationAngle);
           
           paint.color = const Color(0xFFFACC15);
@@ -2212,28 +2209,35 @@ class GamePainter extends CustomPainter {
       }
     }
 
-        // ==========================================
+    // ==========================================
     // ИСПРАВЛЕННЫЙ БЛОК 6: ШЛЕЙФ ДЛЯ ВСЕХ РЕЖИМОВ
     // ==========================================
     if (trailParticles.isNotEmpty) {
       canvas.save();
       for (int i = 0; i < trailParticles.length; i++) {
-        // Рассчитываем плавное затухание от старых частиц к новым
         double alpha = (i / trailParticles.length) * 0.25;
-        
-        // Разделяем дизайн шлейфа под текущий режим игрока
+        double sizeFactor = (i / trailParticles.length); 
+
         if (player.isShip) {
-          paint.color = const Color(0xFFA855F7).withOpacity(alpha); // Фиолетовый для корабля
-          double trailSize = 24;
+          paint.color = const Color(0xFFA855F7).withOpacity(alpha); 
+          double trailSize = 24 * sizeFactor; 
           canvas.drawRect(
-            Rect.fromLTWH(trailParticles[i].dx - cameraX - trailSize / 2, trailParticles[i].dy - trailSize / 2, trailSize, trailSize),
+            Rect.fromCenter(
+              center: Offset(trailParticles[i].dx - cameraX, trailParticles[i].dy),
+              width: trailSize,
+              height: trailSize,
+            ),
             paint,
           );
         } else {
-          paint.color = const Color(0xFF00F2FE).withOpacity(alpha); // Неоново-бирюзовый для кубика
-          double trailSize = 30;
+          paint.color = const Color(0xFF00F2FE).withOpacity(alpha); 
+          double trailSize = 30 * sizeFactor; 
           canvas.drawRect(
-            Rect.fromLTWH(trailParticles[i].dx - cameraX - trailSize / 2, trailParticles[i].dy - trailSize / 2, trailSize, trailSize),
+            Rect.fromCenter(
+              center: Offset(trailParticles[i].dx - cameraX, trailParticles[i].dy),
+              width: trailSize,
+              height: trailSize,
+            ),
             paint,
           );
         }
@@ -2249,19 +2253,16 @@ class GamePainter extends CustomPainter {
       canvas.translate(player.x - cameraX + player.size / 2, player.y + player.size / 2);
       canvas.rotate(player.rotation);
 
-            if (player.isShip) {
+      if (player.isShip) {
         paint.color = const Color(0xFFC084FC);
-        
-        // НАСТРОЙКА: Немного уменьшаем общий размер самолётика для маневренности
         double currentSize = player.size * 0.85; 
-        double halfW = currentSize / 2; // Половина ширины (высоты треугольника)
-        double halfH = currentSize / 2.6; // Уменьшаем высоту основания, чтобы сделать его уже
+        double halfW = currentSize / 2; 
+        double halfH = currentSize / 2.6; 
 
-        // Равнобедренный треугольник, вытянутый вперед строго параллельно линии пола
         Path shipPath = Path()
-          ..moveTo(-halfW, -halfH) // Верхний хвост (корма)
-          ..lineTo(-halfW, halfH)  // Нижний хвост (корма)
-          ..lineTo(halfW * 1.3, 0) // Вытянутый нос корабля (смотрит строго вправо по оси X)
+          ..moveTo(-halfW, -halfH) 
+          ..lineTo(-halfW, halfH)  
+          ..lineTo(halfW * 1.3, 0) 
           ..close();
         canvas.drawPath(shipPath, paint);
 
@@ -2271,7 +2272,6 @@ class GamePainter extends CustomPainter {
         canvas.drawPath(shipPath, paint);
         paint.style = PaintingStyle.fill;
       } else {
-        // Отрисовка кубика
         paint.color = const Color(0xFF00F2FE);
         canvas.drawRect(Rect.fromCircle(center: Offset.zero, radius: player.size / 2), paint);
 
@@ -2284,9 +2284,7 @@ class GamePainter extends CustomPainter {
       canvas.restore();
     }
 
-
-
-        // ==========================================
+    // ==========================================
     // ОПТИМИЗИРОВАННЫЙ БЛОК 8: ФИОЛЕТОВЫЕ ПОРТАЛЫ
     // ==========================================
     if (currentLevel == 2 || currentLevel == 3) {
@@ -2336,19 +2334,16 @@ class GamePainter extends CustomPainter {
           paint.strokeWidth = 5;
           canvas.drawLine(Offset(x, 100), Offset(x, floorY), paint);
 
-          // ВЕКТОРНЫЕ СТРЕЛКИ ВМЕСТО ТЕКСТА (РАБОТАЮТ В 100 РАЗ БЫСТРЕЕ)
           paint.style = PaintingStyle.fill;
           paint.color = Colors.white;
-          canvas.translate(x, 80); // Сдвиг к вершине портала
+          canvas.translate(x, 80); 
 
           Path arrowPath = Path();
           if (isEntering) {
-            // Рисуем стрелку вниз ▼
             arrowPath.moveTo(-8, -5);
             arrowPath.lineTo(8, -5);
             arrowPath.lineTo(0, 7);
           } else {
-            // Рисуем стрелку вверх ▲
             arrowPath.moveTo(-8, 5);
             arrowPath.lineTo(8, 5);
             arrowPath.lineTo(0, -7);
@@ -2389,10 +2384,9 @@ class GamePainter extends CustomPainter {
     for (var p in portalParticles) {
       if (p.alpha > 0) {
         canvas.save();
-        paint.color = const Color(0xFF4ADE80).withOpacity(p.alpha); // Неоново-зелёный цвет
+        paint.color = const Color(0xFF4ADE80).withOpacity(p.alpha); 
         paint.style = PaintingStyle.fill;
         
-        // Рисуем искры в виде аккуратных овалов, летящих из портала
         final Rect pRect = Rect.fromLTWH(p.x - cameraX - p.size / 2, p.y - p.size / 2, p.size, p.size);
         canvas.drawOval(pRect, paint); 
         canvas.restore();
@@ -2424,7 +2418,7 @@ class GamePainter extends CustomPainter {
     // ==========================================
     // ОПТИМИЗИРОВАННЫЙ БЛОК 10: ВЕРХНИЙ ПРОГРЕСС-БАР
     // ==========================================
-    if (showPercent) {
+    if (showPercent && isPlaying) {
       double barW = 250;
       double barH = 22;
       double barX = (size.width / scale) / 2 - barW / 2;
@@ -2436,7 +2430,6 @@ class GamePainter extends CustomPainter {
       paint.color = const Color(0xFF00F2FE);
       canvas.drawRect(Rect.fromLTWH(barX, barY, barW * (currentProgress / 100.0), barH), paint);
 
-      // Кэшируем TextPainter локально внутри кадра (он один, это не бьет по FPS)
       TextPainter progressTextPainter = TextPainter(
         text: TextSpan(
           text: '$currentProgress%', 
@@ -2451,10 +2444,14 @@ class GamePainter extends CustomPainter {
       );
     }
 
-    canvas.restore(); // Сбрасываем глобальный масштаб
+    canvas.restore(); 
   }
 
-  class DifficultyShapePainter extends CustomPainter {
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+}
+
+class DifficultyShapePainter extends CustomPainter {
   final int difficultyIndex;
   final Color color;
 
@@ -2468,29 +2465,24 @@ class GamePainter extends CustomPainter {
     double cx = size.width / 2;
     double cy = size.height / 2;
 
-    // 1. ОТРИСОВКА ГЕОМЕТРИЧЕСКОЙ ФИГУРЫ ОСНОВАНИЯ
     if (difficultyIndex == 0) {
-      // Легко: Идеальный гладкий круг
       canvas.drawCircle(Offset(cx, cy), 18, paint);
     } 
     else if (difficultyIndex == 1) {
-      // Средне: Скругленный ромб (овал, суженный по бокам)
       canvas.drawOval(Rect.fromCenter(center: Offset(cx, cy), width: 36, height: 36), paint);
     } 
     else if (difficultyIndex == 2) {
-      // Затруднено: Правильный шестиугольник
       Path hex = Path();
       hex.moveTo(cx, cy - 18);
       hex.lineTo(cx + 16, cy - 9);
       hex.lineTo(cx + 16, cy + 9);
-      hex.lineTo(cx, cy + 18);
+      hex.moveTo(cx, cy + 18);
       hex.lineTo(cx - 16, cy + 9);
       hex.lineTo(cx - 16, cy - 9);
       hex.close();
       canvas.drawPath(hex, paint);
     } 
     else if (difficultyIndex == 3) {
-      // Сложно: Треугольник вершиной вниз
       Path tri = Path()
         ..moveTo(cx - 18, cy - 14)
         ..lineTo(cx + 18, cy - 14)
@@ -2499,11 +2491,9 @@ class GamePainter extends CustomPainter {
       canvas.drawPath(tri, paint);
     } 
     else if (difficultyIndex == 4) {
-      // Невозможно: Суровый квадрат со срезанными углами
       canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromCenter(center: Offset(cx, cy), width: 34, height: 34), const Radius.circular(4)), paint);
     } 
     else if (difficultyIndex == 5) {
-      // Кошмар: Острая четырехконечная звезда (разъяренная форма)
       Path star = Path()
         ..moveTo(cx, cy - 20)
         ..lineTo(cx + 6, cy - 6)
@@ -2517,44 +2507,80 @@ class GamePainter extends CustomPainter {
       canvas.drawPath(star, paint);
     }
 
-    // 2. ОТРИСОВКА УНИКАЛЬНОЙ МИМИКИ ЛИЦА (ГЛАЗА И Рот)
     if (difficultyIndex == 0) {
-      // Легко: Веселые точки и полноценная улыбка
+      canvas.drawCircle(Offset(cx - 5, cy - 3), 2, Paint()..color = const Color(0xFF0F172A));
+      canvas.drawCircle(Offset(cx + 5, cy - 3), 2, Paint()..color = const Color(0xFF0F172A));
+      canvas.drawArc(Rect.fromCenter(center: Offset(cx, cy + 1), width: 14, height: 10), 0, math.pi, false, facePaint);
+    } 
+        else if (difficultyIndex == 1) {
+      canvas.drawOval(Rect.fromCenter(center: Offset(cx, cy), width: 36, height: 36), paint);
+    } 
+    else if (difficultyIndex == 2) {
+      Path hex = Path();
+      hex.moveTo(cx, cy - 18);
+      hex.lineTo(cx + 16, cy - 9);
+      hex.lineTo(cx + 16, cy + 9);
+      hex.moveTo(cx, cy + 18);
+      hex.lineTo(cx - 16, cy + 9);
+      hex.lineTo(cx - 16, cy - 9);
+      hex.close();
+      canvas.drawPath(hex, paint);
+    } 
+    else if (difficultyIndex == 3) {
+      Path tri = Path()
+        ..moveTo(cx - 18, cy - 14)
+        ..lineTo(cx + 18, cy - 14)
+        ..lineTo(cx, cy + 18)
+        ..close();
+      canvas.drawPath(tri, paint);
+    } 
+    else if (difficultyIndex == 4) {
+      canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromCenter(center: Offset(cx, cy), width: 34, height: 34), const Radius.circular(4)), paint);
+    } 
+    else if (difficultyIndex == 5) {
+      Path star = Path()
+        ..moveTo(cx, cy - 20)
+        ..lineTo(cx + 6, cy - 6)
+        ..lineTo(cx + 20, cy)
+        ..lineTo(cx + 6, cy + 6)
+        ..moveTo(cx, cy + 20)
+        ..lineTo(cx - 6, cy + 6)
+        ..lineTo(cx - 20, cy)
+        ..lineTo(cx - 6, cy - 6)
+        ..close();
+      canvas.drawPath(star, paint);
+    }
+
+    if (difficultyIndex == 0) {
       canvas.drawCircle(Offset(cx - 5, cy - 3), 2, Paint()..color = const Color(0xFF0F172A));
       canvas.drawCircle(Offset(cx + 5, cy - 3), 2, Paint()..color = const Color(0xFF0F172A));
       canvas.drawArc(Rect.fromCenter(center: Offset(cx, cy + 1), width: 14, height: 10), 0, math.pi, false, facePaint);
     } 
     else if (difficultyIndex == 1) {
-      // Средне: Легкая, чуть поникшая улыбка
       canvas.drawCircle(Offset(cx - 5, cy - 3), 2, Paint()..color = const Color(0xFF0F172A));
       canvas.drawCircle(Offset(cx + 5, cy - 3), 2, Paint()..color = const Color(0xFF0F172A));
       canvas.drawArc(Rect.fromCenter(center: Offset(cx, cy + 3), width: 12, height: 6), 0, math.pi, false, facePaint);
     } 
     else if (difficultyIndex == 2) {
-      // Затруднено: Простые глаза и строго прямая линия рта (нейтральный)
       canvas.drawCircle(Offset(cx - 5, cy - 3), 2, Paint()..color = const Color(0xFF0F172A));
       canvas.drawCircle(Offset(cx + 5, cy - 3), 2, Paint()..color = const Color(0xFF0F172A));
       canvas.drawLine(Offset(cx - 6, cy + 4), Offset(cx + 6, cy + 4), facePaint);
     } 
     else if (difficultyIndex == 3) {
-      // Сложно: Недовольный рот дугой вверх, глаза-черточки под углом
       canvas.drawLine(Offset(cx - 8, cy - 5), Offset(cx - 3, cy - 3), facePaint);
       canvas.drawLine(Offset(cx + 8, cy - 5), Offset(cx + 3, cy - 3), facePaint);
       canvas.drawArc(Rect.fromCenter(center: Offset(cx, cy + 4), width: 12, height: 8), math.pi, math.pi, false, facePaint);
     } 
     else if (difficultyIndex == 4) {
-      // Невозможно: Нахмуренные брови "домиком" и злой агрессивный рот
       canvas.drawLine(Offset(cx - 7, cy - 5), Offset(cx - 2, cy - 2), facePaint);
       canvas.drawLine(Offset(cx + 7, cy - 5), Offset(cx + 2, cy - 2), facePaint);
       canvas.drawArc(Rect.fromCenter(center: Offset(cx, cy + 5), width: 14, height: 10), math.pi, math.pi, false, facePaint);
-      canvas.drawLine(Offset(cx - 7, cy + 5), Offset(cx + 7, cy + 5), facePaint); // Зубы/оскал
+      canvas.drawLine(Offset(cx - 7, cy + 5), Offset(cx + 7, cy + 5), facePaint); 
     } 
     else if (difficultyIndex == 5) {
-      // Кошмар: Разъяренный крестообразный оскал, глаза-точки в глубокой посадке
       facePaint.strokeWidth = 3.0;
       canvas.drawLine(Offset(cx - 8, cy - 6), Offset(cx - 2, cy - 2), facePaint);
       canvas.drawLine(Offset(cx + 8, cy - 6), Offset(cx + 2, cy - 2), facePaint);
-      // Зигзагообразный яростный рот
       Path madMouth = Path()
         ..moveTo(cx - 8, cy + 4)
         ..lineTo(cx - 4, cy + 7)
@@ -2568,4 +2594,6 @@ class GamePainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }
+
+
 
