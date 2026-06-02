@@ -88,6 +88,36 @@ class Player {
   bool isUpsideDown = false;
 }
 
+class CustomLevel {
+  final String id;
+  final String name;
+  final int difficultyIndex;
+  int progress;
+
+  CustomLevel({
+    required this.id,
+    required this.name,
+    required this.difficultyIndex,
+    this.progress = 0,
+  });
+
+  // Превращаем уровень в JSON-карту для сохранения на диск
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'difficultyIndex': difficultyIndex,
+    'progress': progress,
+  };
+
+  // Восстанавливаем уровень из JSON-карты при загрузке
+  factory CustomLevel.fromJson(Map<String, dynamic> json) => CustomLevel(
+    id: json['id'],
+    name: json['name'],
+    difficultyIndex: json['difficultyIndex'],
+    progress: json['progress'] ?? 0,
+  );
+}
+
 class GameScreen extends StatefulWidget {
   const GameScreen({super.key});
 
@@ -99,6 +129,11 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   GameState _state = GameState.mainMenu;
   
   final ValueNotifier<int> _gameTickNotifier = ValueNotifier<int>(0);
+
+   void _saveCustomLevelsToPrefs() {
+    String encoded = jsonEncode(_myCreatedLevels.map((e) => e.toJson()).toList());
+    _prefs.setString('cybics_custom_levels', encoded);
+  }
 
   late SharedPreferences _prefs;
   int _maxProgress = 0, _maxProgress2 = 0, _maxProgress3 = 0, _maxProgress4 = 0;
@@ -150,6 +185,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   final TextEditingController _searchController = TextEditingController(); // Контроллер для поля поиска
   final TextEditingController _levelNameController = TextEditingController(); // Контроллер названия уровня
   int _selectedDifficultyIndex = 0; // Выбранная сложность (0 - легко, 5 - кошмар)
+  List<CustomLevel> _myCreatedLevels = []; // Список всех созданных уровней игрока
   bool _isPressing = false;
 
   bool _showNewRecord = false;
@@ -194,6 +230,11 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       if (m3 != null) _savedMedals3 = List<bool>.from(jsonDecode(m3));
       String? m4 = _prefs.getString('cybics_medals_4');
       if (m4 != null) _savedMedals4 = List<bool>.from(jsonDecode(m4));
+      String? savedLevelsJson = _prefs.getString('cybics_custom_levels');
+      if (savedLevelsJson != null) {
+        List<dynamic> decoded = jsonDecode(savedLevelsJson);
+        _myCreatedLevels = decoded.map((item) => CustomLevel.fromJson(item)).toList();
+      }
     });
     _updatePlayersVolume();
     _startMusicSequencer();
@@ -1398,9 +1439,19 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
 
-
-  // ЭКРАН 2: Большой квадрат результатов "Уровней не найдено"
   Widget _buildSearchResultsMenu() {
+    final List<Color> diffColors = [
+      const Color(0xFF38BDF8), const Color(0xFF4ADE80), const Color(0xFFFACC15),
+      const Color(0xFFEA580C), const Color(0xFFEF4444), const Color(0xFF8B5CF6)
+    ];
+
+    String query = _searchController.text.trim().toLowerCase();
+    
+    // ИСПРАВЛЕНИЕ: Ищем совпадения по имени или ID среди сохраненных кастомных уровней
+    List<CustomLevel> foundLevels = _myCreatedLevels.where((lvl) {
+      return lvl.name.toLowerCase().contains(query) || lvl.id.toLowerCase() == query;
+    }).toList();
+
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -1412,7 +1463,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           ),
           const SizedBox(height: 15),
           
-          // Большой квадрат, такой же как в скачанных уровнях
           Container(
             width: 450,
             height: 220,
@@ -1421,17 +1471,75 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               border: Border.all(color: const Color(0xFF06B6D4), width: 2),
               borderRadius: BorderRadius.circular(16),
             ),
-            child: const Center(
-              child: Text(
-                'Уровней не найдено', 
-                style: TextStyle(fontSize: 16, color: Colors.grey, fontWeight: FontWeight.w500)
-              ),
-            ),
+            // Выводим результаты поиска
+            child: foundLevels.isEmpty
+                ? const Center(
+                    child: Text(
+                      'Уровней не найдено', 
+                      style: TextStyle(fontSize: 16, color: Colors.grey, fontWeight: FontWeight.w500)
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.all(10),
+                    itemCount: foundLevels.length,
+                    itemBuilder: (context, index) {
+                      final lvl = foundLevels[index];
+                      return Container(
+                        margin: const EdgeInsets.symmetric(vertical: 5),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0F172A),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFF334155)),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    lvl.name, 
+                                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
+                                  ),
+                                  Text('Номер: ${lvl.id}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                                  const SizedBox(height: 4),
+                                  // Полоса прогресса найденного уровня
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(4),
+                                    child: Stack(
+                                      children: [
+                                        Container(height: 6, color: const Color(0xFF334155)),
+                                        FractionallySizedBox(
+                                          widthFactor: lvl.progress / 100.0,
+                                          child: Container(height: 6, color: diffColors[lvl.difficultyIndex]),
+                                        ),
+                                      ],
+                                    ),
+                                  )
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            SizedBox(
+                              width: 32,
+                              height: 32,
+                              child: CustomPaint(
+                                painter: DifficultyShapePainter(
+                                  difficultyIndex: lvl.difficultyIndex, 
+                                  color: diffColors[lvl.difficultyIndex]
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
           ),
           
           const SizedBox(height: 15),
           
-          // Кнопка Назад (возвращает обратно в меню ввода, сохраняя текст)
           _buildBtn('Назад', () {
             setState(() { _state = GameState.searchMenu; });
           }, minWidth: 180),
@@ -1440,7 +1548,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
 
-           Widget _buildCreatedLevelsMenu() {
+
+    Widget _buildCreatedLevelsMenu() {
+    final List<Color> diffColors = [
+      const Color(0xFF38BDF8), const Color(0xFF4ADE80), const Color(0xFFFACC15),
+      const Color(0xFFEA580C), const Color(0xFFEF4444), const Color(0xFF8B5CF6)
+    ];
+
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -1456,6 +1570,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
+              // Твой центральный большой короб
               Container(
                 width: 420, 
                 height: 220,
@@ -1464,21 +1579,91 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                   border: Border.all(color: const Color(0xFF06B6D4), width: 2), 
                   borderRadius: BorderRadius.circular(16),
                 ),
-                child: const Center(
-                  child: Text(
-                    'Нет созданных уровней', 
-                    style: TextStyle(fontSize: 16, color: Colors.grey, fontWeight: FontWeight.w500)
-                  ),
-                ),
+                // ИСПРАВЛЕНИЕ: Если уровней нет — пишем текст, если есть — выводим список плашек
+                child: _myCreatedLevels.isEmpty
+                    ? const Center(
+                        child: Text(
+                          'Нет созданных уровней', 
+                          style: TextStyle(fontSize: 16, color: Colors.grey, fontWeight: FontWeight.w500)
+                        ),
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.all(10),
+                        itemCount: _myCreatedLevels.length,
+                        itemBuilder: (context, index) {
+                          final lvl = _myCreatedLevels[index];
+                          return Container(
+                            margin: const EdgeInsets.symmetric(vertical: 5),
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0F172A),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: const Color(0xFF334155)),
+                            ),
+                            child: Row(
+                              children: [
+                                // Кнопка "Редактировать" на левой стороне (пока заблокирована - null)
+                                _buildBtn('Редактировать', null, isSecondary: true, minWidth: 120),
+                                const SizedBox(width: 12),
+                                
+                                // Текстовый блок: Имя и ID уровня
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        lvl.name, 
+                                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
+                                        maxLines: 1, overflow: TextOverflow.ellipsis,
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Номер: ${lvl.id}', 
+                                        style: const TextStyle(fontSize: 11, color: Colors.grey),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      // Полоса прогресса уровня
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(4),
+                                        child: Stack(
+                                          children: [
+                                            Container(height: 10, color: const Color(0xFF334155)),
+                                            FractionallySizedBox(
+                                              widthFactor: lvl.progress / 100.0,
+                                              child: Container(height: 10, color: diffColors[lvl.difficultyIndex]),
+                                            ),
+                                          ],
+                                        ),
+                                      )
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                
+                                // Круг сложности справа от текста
+                                SizedBox(
+                                  width: 32,
+                                  height: 32,
+                                  child: CustomPaint(
+                                    painter: DifficultyShapePainter(
+                                      difficultyIndex: lvl.difficultyIndex, 
+                                      color: diffColors[lvl.difficultyIndex]
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
               ),
               
               const SizedBox(width: 20), 
               
-              // ИСПРАВЛЕНИЕ: Кнопка стала активной и переводит на экран создания уровня
               _buildBtn('Добавить\nуровень', () {
-                _levelNameController.clear(); // Очищаем имя при входе
+                _levelNameController.clear(); 
                 setState(() { 
-                  _selectedDifficultyIndex = 0; // Сбрасываем сложность на "Легко"
+                  _selectedDifficultyIndex = 0; 
                   _state = GameState.newLevelMenu; 
                 });
               }, isSecondary: true, minWidth: 140),
@@ -1494,6 +1679,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       ),
     );
   }
+
 
   Widget _buildNewLevelMenu() {
     // Список данных для наших сложностей
@@ -1604,11 +1790,30 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             
             const SizedBox(height: 25),
             
-            // Нижние кнопки Создать и Отмена
+                        // Нижние кнопки Создать и Отмена
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                _buildBtn('Создать', null, minWidth: 160), // Пока заблокирована (null)
+                _buildBtn('Создать', () {
+                  String enteredName = _levelNameController.text.trim();
+                  if (enteredName.isEmpty) enteredName = "Без названия";
+
+                  // Генерируем случайный 4-значный ID (номер) уровня для поиска
+                  var rand = math.Random();
+                  String generatedId = "#${1000 + rand.nextInt(9000)}";
+
+                  setState(() {
+                    // Создаем и добавляем новый уровень в список
+                    _myCreatedLevels.add(CustomLevel(
+                      id: generatedId,
+                      name: enteredName,
+                      difficultyIndex: _selectedDifficultyIndex,
+                    ));
+                    _saveCustomLevelsToPrefs(); // Записываем в SharedPreferences
+                    _state = GameState.createdLevelsMenu; // Переходим обратно
+                  });
+                  FocusScope.of(context).unfocus();
+                }, minWidth: 160),
                 const SizedBox(width: 20),
                 _buildBtn('Отмена', () {
                   FocusScope.of(context).unfocus();
