@@ -29,7 +29,7 @@ class CybicsApp extends StatelessWidget {
   }
 }
 
-enum GameState { mainMenu, levelsMenu, settingsMenu, gameplay, customLevelsMenu, downloadedLevelsMenu, searchMenu, searchResultsMenu, createdLevelsMenu }
+enum GameState { mainMenu, levelsMenu, settingsMenu, gameplay, customLevelsMenu, downloadedLevelsMenu, searchMenu, searchResultsMenu, createdLevelsMenu, newLevelMenu }
 
 class Obstacle {
   final String type;
@@ -148,6 +148,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   int _currentProgress = 0;
   int _spaceTimeCounter = 0; // Счетчик кадров для 3-секундного таймера в космосе
   final TextEditingController _searchController = TextEditingController(); // Контроллер для поля поиска
+  final TextEditingController _levelNameController = TextEditingController(); // Контроллер названия уровня
+  int _selectedDifficultyIndex = 0; // Выбранная сложность (0 - легко, 5 - кошмар)
   bool _isPressing = false;
 
   bool _showNewRecord = false;
@@ -1156,6 +1158,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         return _buildSearchResultsMenu();
       case GameState.createdLevelsMenu:
         return _buildCreatedLevelsMenu();
+      case GameState.newLevelMenu:
+        return _buildNewLevelMenu();
     }
   }
 
@@ -1436,7 +1440,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
 
-         Widget _buildCreatedLevelsMenu() {
+           Widget _buildCreatedLevelsMenu() {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -1450,10 +1454,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
-            // ИСПРАВЛЕНИЕ: Заменили MainAxisAlignment на CrossAxisAlignment
-            crossAxisAlignment: CrossAxisAlignment.center, 
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // Наш большой квадрат по центру
               Container(
                 width: 420, 
                 height: 220,
@@ -1472,18 +1474,150 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               
               const SizedBox(width: 20), 
               
-              // Кнопка "Добавить уровень"
-              _buildBtn('Добавить\nуровень', null, isSecondary: true, minWidth: 140),
+              // ИСПРАВЛЕНИЕ: Кнопка стала активной и переводит на экран создания уровня
+              _buildBtn('Добавить\nуровень', () {
+                _levelNameController.clear(); // Очищаем имя при входе
+                setState(() { 
+                  _selectedDifficultyIndex = 0; // Сбрасываем сложность на "Легко"
+                  _state = GameState.newLevelMenu; 
+                });
+              }, isSecondary: true, minWidth: 140),
             ],
           ),
           
           const SizedBox(height: 15),
           
-          // Кнопка возврата в меню "Другие уровни"
           _buildBtn('Назад', () {
             setState(() { _state = GameState.customLevelsMenu; });
           }, minWidth: 180),
         ],
+      ),
+    );
+  }
+
+  Widget _buildNewLevelMenu() {
+    // Список данных для наших сложностей
+    final List<Map<String, dynamic>> difficulties = [
+      {'name': 'Легко', 'color': const Color(0xFF38BDF8)},       // Голубой
+      {'name': 'Средне', 'color': const Color(0xFF4ADE80)},      // Зелёный
+      {'name': 'Затруднено', 'color': const Color(0xFFFACC15)},  // Жёлтый
+      {'name': 'Сложно', 'color': const Color(0xFF3B82F6)},      // Синий
+      {'name': 'Невозможно', 'color': const Color(0xFFEF4444)},  // Красный
+      {'name': 'Кошмар', 'color': const Color(0xFF8B5CF6)},      // Фиолетовый
+    ];
+
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(vertical: 15),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text(
+              'Новый уровень', 
+              style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, letterSpacing: 1.5)
+            ),
+            const SizedBox(height: 15),
+            
+            // Строка ввода названия уровня
+            SizedBox(
+              width: 420,
+              child: TextField(
+                controller: _levelNameController,
+                maxLength: 20, // Лимит 20 символов
+                style: const TextStyle(color: Colors.white, fontSize: 18),
+                textAlign: TextAlign.center,
+                decoration: InputDecoration(
+                  counterText: "", 
+                  hintText: 'Введите название уровня...',
+                  hintStyle: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 16),
+                  filled: true,
+                  fillColor: const Color(0xFF1E293B),
+                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(25),
+                    borderSide: const BorderSide(color: Color(0xFF334155), width: 1.5),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(25),
+                    borderSide: const BorderSide(color: Color(0xFF06B6D4), width: 2),
+                  ),
+                ),
+              ),
+            ),
+            
+            const SizedBox(height: 15),
+            const Text(
+              'Выберите сложность уровня', 
+              style: TextStyle(fontSize: 14, color: Colors.grey, fontWeight: FontWeight.bold)
+            ),
+            const SizedBox(height: 15),
+            
+            // Горизонтальный ряд выбора сложностей
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(6, (index) {
+                bool isSelected = _selectedDifficultyIndex == index;
+                return GestureDetector(
+                  onTap: () {
+                    setState(() { _selectedDifficultyIndex = index; });
+                  },
+                  child: Container(
+                    width: 105,
+                    margin: const EdgeInsets.symmetric(horizontal: 5),
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    decoration: BoxDecoration(
+                      color: isSelected ? const Color(0xFF1E293B) : const Color(0xFF0F172A),
+                      border: Border.all(
+                        color: isSelected ? difficulties[index]['color'] : Colors.transparent, 
+                        width: 2
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      children: [
+                        Text(
+                          difficulties[index]['name'], 
+                          style: TextStyle(
+                            fontSize: 12, 
+                            fontWeight: FontWeight.bold, 
+                            color: isSelected ? difficulties[index]['color'] : Colors.grey
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        // Векторная отрисовка уникального смайлика-фигуры
+                        SizedBox(
+                          width: 40,
+                          height: 40,
+                          child: CustomPaint(
+                            painter: DifficultyShapePainter(
+                              difficultyIndex: index, 
+                              color: difficulties[index]['color']
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }),
+            ),
+            
+            const SizedBox(height: 25),
+            
+            // Нижние кнопки Создать и Отмена
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _buildBtn('Создать', null, minWidth: 160), // Пока заблокирована (null)
+                const SizedBox(width: 20),
+                _buildBtn('Отмена', () {
+                  FocusScope.of(context).unfocus();
+                  setState(() { _state = GameState.createdLevelsMenu; });
+                }, isSecondary: true, minWidth: 160),
+              ],
+            )
+          ],
+        ),
       ),
     );
   }
@@ -2320,6 +2454,118 @@ class GamePainter extends CustomPainter {
     canvas.restore(); // Сбрасываем глобальный масштаб
   }
 
+  class DifficultyShapePainter extends CustomPainter {
+  final int difficultyIndex;
+  final Color color;
+
+  DifficultyShapePainter({required this.difficultyIndex, required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Paint paint = Paint()..color = color..style = PaintingStyle.fill;
+    final Paint facePaint = Paint()..color = const Color(0xFF0F172A)..style = PaintingStyle.stroke..strokeWidth = 2.5..strokeCap = StrokeCap.round;
+    
+    double cx = size.width / 2;
+    double cy = size.height / 2;
+
+    // 1. ОТРИСОВКА ГЕОМЕТРИЧЕСКОЙ ФИГУРЫ ОСНОВАНИЯ
+    if (difficultyIndex == 0) {
+      // Легко: Идеальный гладкий круг
+      canvas.drawCircle(Offset(cx, cy), 18, paint);
+    } 
+    else if (difficultyIndex == 1) {
+      // Средне: Скругленный ромб (овал, суженный по бокам)
+      canvas.drawOval(Rect.fromCenter(center: Offset(cx, cy), width: 36, height: 36), paint);
+    } 
+    else if (difficultyIndex == 2) {
+      // Затруднено: Правильный шестиугольник
+      Path hex = Path();
+      hex.moveTo(cx, cy - 18);
+      hex.lineTo(cx + 16, cy - 9);
+      hex.lineTo(cx + 16, cy + 9);
+      hex.lineTo(cx, cy + 18);
+      hex.lineTo(cx - 16, cy + 9);
+      hex.lineTo(cx - 16, cy - 9);
+      hex.close();
+      canvas.drawPath(hex, paint);
+    } 
+    else if (difficultyIndex == 3) {
+      // Сложно: Треугольник вершиной вниз
+      Path tri = Path()
+        ..moveTo(cx - 18, cy - 14)
+        ..lineTo(cx + 18, cy - 14)
+        ..lineTo(cx, cy + 18)
+        ..close();
+      canvas.drawPath(tri, paint);
+    } 
+    else if (difficultyIndex == 4) {
+      // Невозможно: Суровый квадрат со срезанными углами
+      canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromCenter(center: Offset(cx, cy), width: 34, height: 34), const Radius.circular(4)), paint);
+    } 
+    else if (difficultyIndex == 5) {
+      // Кошмар: Острая четырехконечная звезда (разъяренная форма)
+      Path star = Path()
+        ..moveTo(cx, cy - 20)
+        ..lineTo(cx + 6, cy - 6)
+        ..lineTo(cx + 20, cy)
+        ..lineTo(cx + 6, cy + 6)
+        ..moveTo(cx, cy + 20)
+        ..lineTo(cx - 6, cy + 6)
+        ..lineTo(cx - 20, cy)
+        ..lineTo(cx - 6, cy - 6)
+        ..close();
+      canvas.drawPath(star, paint);
+    }
+
+    // 2. ОТРИСОВКА УНИКАЛЬНОЙ МИМИКИ ЛИЦА (ГЛАЗА И Рот)
+    if (difficultyIndex == 0) {
+      // Легко: Веселые точки и полноценная улыбка
+      canvas.drawCircle(Offset(cx - 5, cy - 3), 2, Paint()..color = const Color(0xFF0F172A));
+      canvas.drawCircle(Offset(cx + 5, cy - 3), 2, Paint()..color = const Color(0xFF0F172A));
+      canvas.drawArc(Rect.fromCenter(center: Offset(cx, cy + 1), width: 14, height: 10), 0, math.pi, false, facePaint);
+    } 
+    else if (difficultyIndex == 1) {
+      // Средне: Легкая, чуть поникшая улыбка
+      canvas.drawCircle(Offset(cx - 5, cy - 3), 2, Paint()..color = const Color(0xFF0F172A));
+      canvas.drawCircle(Offset(cx + 5, cy - 3), 2, Paint()..color = const Color(0xFF0F172A));
+      canvas.drawArc(Rect.fromCenter(center: Offset(cx, cy + 3), width: 12, height: 6), 0, math.pi, false, facePaint);
+    } 
+    else if (difficultyIndex == 2) {
+      // Затруднено: Простые глаза и строго прямая линия рта (нейтральный)
+      canvas.drawCircle(Offset(cx - 5, cy - 3), 2, Paint()..color = const Color(0xFF0F172A));
+      canvas.drawCircle(Offset(cx + 5, cy - 3), 2, Paint()..color = const Color(0xFF0F172A));
+      canvas.drawLine(Offset(cx - 6, cy + 4), Offset(cx + 6, cy + 4), facePaint);
+    } 
+    else if (difficultyIndex == 3) {
+      // Сложно: Недовольный рот дугой вверх, глаза-черточки под углом
+      canvas.drawLine(Offset(cx - 8, cy - 5), Offset(cx - 3, cy - 3), facePaint);
+      canvas.drawLine(Offset(cx + 8, cy - 5), Offset(cx + 3, cy - 3), facePaint);
+      canvas.drawArc(Rect.fromCenter(center: Offset(cx, cy + 4), width: 12, height: 8), math.pi, math.pi, false, facePaint);
+    } 
+    else if (difficultyIndex == 4) {
+      // Невозможно: Нахмуренные брови "домиком" и злой агрессивный рот
+      canvas.drawLine(Offset(cx - 7, cy - 5), Offset(cx - 2, cy - 2), facePaint);
+      canvas.drawLine(Offset(cx + 7, cy - 5), Offset(cx + 2, cy - 2), facePaint);
+      canvas.drawArc(Rect.fromCenter(center: Offset(cx, cy + 5), width: 14, height: 10), math.pi, math.pi, false, facePaint);
+      canvas.drawLine(Offset(cx - 7, cy + 5), Offset(cx + 7, cy + 5), facePaint); // Зубы/оскал
+    } 
+    else if (difficultyIndex == 5) {
+      // Кошмар: Разъяренный крестообразный оскал, глаза-точки в глубокой посадке
+      facePaint.strokeWidth = 3.0;
+      canvas.drawLine(Offset(cx - 8, cy - 6), Offset(cx - 2, cy - 2), facePaint);
+      canvas.drawLine(Offset(cx + 8, cy - 6), Offset(cx + 2, cy - 2), facePaint);
+      // Зигзагообразный яростный рот
+      Path madMouth = Path()
+        ..moveTo(cx - 8, cy + 4)
+        ..lineTo(cx - 4, cy + 7)
+        ..lineTo(cx, cy + 3)
+        ..lineTo(cx + 4, cy + 7)
+        ..lineTo(cx + 8, cy + 4);
+      canvas.drawPath(madMouth, facePaint);
+    }
+  }
+
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }
+
