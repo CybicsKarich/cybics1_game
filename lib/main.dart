@@ -1501,7 +1501,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       {'name': 'Легко', 'color': const Color(0xFF38BDF8)},       // Голубой
       {'name': 'Средне', 'color': const Color(0xFF4ADE80)},      // Зелёный
       {'name': 'Затруднено', 'color': const Color(0xFFFACC15)},  // Жёлтый
-      {'name': 'Сложно', 'color': const Color(0xFF3B82F6)},      // Синий
+      {'name': 'Сложно', 'color': const Color(0xFFEA580C)},
       {'name': 'Невозможно', 'color': const Color(0xFFEF4444)},  // Красный
       {'name': 'Кошмар', 'color': const Color(0xFF8B5CF6)},      // Фиолетовый
     ];
@@ -2459,10 +2459,8 @@ class DifficultyShapePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Основная кисть для круга-базы
     final Paint paint = Paint()..color = color..style = PaintingStyle.fill;
     
-    // Кисть для черных элементов лица (глаза, рот)
     final Paint facePaint = Paint()
       ..color = const Color(0xFF0F172A)
       ..style = PaintingStyle.stroke
@@ -2471,25 +2469,25 @@ class DifficultyShapePainter extends CustomPainter {
       
     double cx = size.width / 2;
     double cy = size.height / 2;
-    double baseRadius = 16.0; // Фиксированный радиус для всех кругов
+    double baseRadius = 16.0; 
 
     // ======================================================================
-    // ЭТАП 1: ДОПОЛНИТЕЛЬНЫЕ ЭФФЕКТЫ (СВЕЧЕНИЕ И ШИПЫ) ПЕРЕД ОТРИСОВКОЙ КРУГА
+    // ЭТАП 1: ДОПОЛНИТЕЛЬНЫЕ ЭФФЕКТЫ (СВЕЧЕНИЕ И ШИПЫ)
     // ======================================================================
     
-    // ДОП. ЭЛЕМЕНТ: Неоновое свечение для Сложно (3), Невозможно (4) и Кошмар (5)
+    // Неоновое свечение для Сложно (3), Невозможно (4) и Кошмар (5)
+    // ИСПРАВЛЕНИЕ: Теперь для "Сложно" оно автоматически станет сочно-оранжевым!
     if (difficultyIndex >= 3) {
       final Paint glowPaint = Paint()
         ..color = color.withOpacity(0.25)
         ..style = PaintingStyle.fill;
-      // Рисуем большое размытое облако за кругом
       canvas.drawCircle(Offset(cx, cy), baseRadius + 8, glowPaint);
     }
 
-    // ДОП. ЭЛЕМЕНТ: Острые шипы по кругу для "Невозможно" (4) и "Кошмар" (5)
+    // Острые шипы по кругу для "Невозможно" (4) и "Кошмар" (5)
     if (difficultyIndex == 4 || difficultyIndex == 5) {
       final Paint spikePaint = Paint()
-        ..color = difficultyIndex == 5 ? const Color(0xFF1E1B4B) : color // У кошмара шипы темные
+        ..color = difficultyIndex == 5 ? const Color(0xFF1E1B4B) : color 
         ..style = PaintingStyle.fill;
         
       final Paint spikeOutline = Paint()
@@ -2497,24 +2495,23 @@ class DifficultyShapePainter extends CustomPainter {
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.5;
 
-      int spikeCount = difficultyIndex == 5 ? 12 : 8; // У кошмара больше шипов!
-      double spikeLength = difficultyIndex == 5 ? 8.0 : 6.0; // Длина шипа наружу
-      double spikeWidth = 5.0; // Ширина основания шипа
+      int spikeCount = difficultyIndex == 5 ? 12 : 8; 
+      double spikeLength = difficultyIndex == 5 ? 8.0 : 6.0; 
+      double spikeWidth = 5.0; 
 
       for (int i = 0; i < spikeCount; i++) {
         canvas.save();
-        // Вращаем холст по кругу, чтобы равномерно распределить шипы
         canvas.translate(cx, cy);
         canvas.rotate((math.pi * 2 / spikeCount) * i);
 
         Path spikePath = Path()
-          ..moveTo(-spikeWidth / 2, -baseRadius + 1) // Левое основание на кромке круга
-          ..lineTo(spikeWidth / 2, -baseRadius + 1)  // Правое основание
-          ..lineTo(0, -baseRadius - spikeLength)     // Острие, торчащее наружу
+          ..moveTo(-spikeWidth / 2, -baseRadius + 1) 
+          ..lineTo(spikeWidth / 2, -baseRadius + 1)  
+          ..lineTo(0, -baseRadius - spikeLength)     
           ..close();
 
         canvas.drawPath(spikePath, spikePaint);
-        canvas.drawPath(spikePath, spikeOutline); // Добавляем яркий контур шипам
+        canvas.drawPath(spikePath, spikeOutline); 
         canvas.restore();
       }
     }
@@ -2524,7 +2521,6 @@ class DifficultyShapePainter extends CustomPainter {
     // ======================================================================
     canvas.drawCircle(Offset(cx, cy), baseRadius, paint);
 
-    // Дополнительный внутренний темный ободок для Кошмара (5), чтобы сделать его мрачнее
     if (difficultyIndex == 5) {
       final Paint nightmareOverlay = Paint()
         ..color = Colors.black.withOpacity(0.3)
@@ -2533,48 +2529,41 @@ class DifficultyShapePainter extends CustomPainter {
     }
 
     // ======================================================================
-    // ЭТАП 3: ОТРИСОВКА МИМИКИ ЛИЦА (СТРОГО НА КРУГЛОЙ ОСНОВЕ)
+    // ЭТАП 3: ОТРИСОВКА МИМИКИ ЛИЦА
     // ======================================================================
     
     if (difficultyIndex == 0) {
-      // ЛЕГКО: Обычные круглые глаза и широкая веселая улыбка
       canvas.drawCircle(Offset(cx - 5, cy - 3), 2, Paint()..color = const Color(0xFF0F172A));
       canvas.drawCircle(Offset(cx + 5, cy - 3), 2, Paint()..color = const Color(0xFF0F172A));
       canvas.drawArc(Rect.fromCenter(center: Offset(cx, cy + 1), width: 14, height: 10), 0, math.pi, false, facePaint);
     } 
     else if (difficultyIndex == 1) {
-      // СРЕДНЕ: Обычные глаза и ИСПРАВЛЕННАЯ (уменьшенная по высоте и ширине) скромная улыбка
       canvas.drawCircle(Offset(cx - 5, cy - 3), 2, Paint()..color = const Color(0xFF0F172A));
       canvas.drawCircle(Offset(cx + 5, cy - 3), 2, Paint()..color = const Color(0xFF0F172A));
-      // Ширина уменьшена с 12 до 8, высота (прогиб) с 6 до 3
       canvas.drawArc(Rect.fromCenter(center: Offset(cx, cy + 2), width: 8, height: 3), 0, math.pi, false, facePaint);
     } 
     else if (difficultyIndex == 2) {
-      // ЗАТРУДНЕНО: Глаза-точки и абсолютно нейтральная ровная линия рта
       canvas.drawCircle(Offset(cx - 5, cy - 3), 2, Paint()..color = const Color(0xFF0F172A));
       canvas.drawCircle(Offset(cx + 5, cy - 3), 2, Paint()..color = const Color(0xFF0F172A));
       canvas.drawLine(Offset(cx - 5, cy + 4), Offset(cx + 5, cy + 4), facePaint);
     } 
     else if (difficultyIndex == 3) {
-      // СЛОЖНО: Злые глаза-черточки под углом и недовольный рот дугой вверх
+      // СЛОЖНО: Оранжево-красный злой смайлик
       canvas.drawLine(Offset(cx - 7, cy - 5), Offset(cx - 2, cy - 3), facePaint);
       canvas.drawLine(Offset(cx + 7, cy - 5), Offset(cx + 2, cy - 3), facePaint);
       canvas.drawArc(Rect.fromCenter(center: Offset(cx, cy + 4), width: 10, height: 6), math.pi, math.pi, false, facePaint);
     } 
     else if (difficultyIndex == 4) {
-      // НЕВОЗМОЖНО: Нахмуренные брови, злые глаза и агрессивный рот-оскал с зубами
       canvas.drawLine(Offset(cx - 7, cy - 5), Offset(cx - 2, cy - 2), facePaint);
       canvas.drawLine(Offset(cx + 7, cy - 5), Offset(cx + 2, cy - 2), facePaint);
       canvas.drawArc(Rect.fromCenter(center: Offset(cx, cy + 4), width: 12, height: 8), math.pi, math.pi, false, facePaint);
-      canvas.drawLine(Offset(cx - 6, cy + 4), Offset(cx + 6, cy + 4), facePaint); // Полоса оскала
+      canvas.drawLine(Offset(cx - 6, cy + 4), Offset(cx + 6, cy + 4), facePaint); 
     } 
     else if (difficultyIndex == 5) {
-      // КОШМАР: Глубокие яростные брови, толстые черты и ломаный зигзагообразный рот
-      facePaint.strokeWidth = 3.0; // Делаем черты лица жирнее и страшнее
+      facePaint.strokeWidth = 3.0; 
       canvas.drawLine(Offset(cx - 7, cy - 5), Offset(cx - 2, cy - 2), facePaint);
       canvas.drawLine(Offset(cx + 7, cy - 5), Offset(cx + 2, cy - 2), facePaint);
       
-      // Зигзаг ярости рта
       Path madMouth = Path()
         ..moveTo(cx - 6, cy + 4)
         ..lineTo(cx - 3, cy + 7)
