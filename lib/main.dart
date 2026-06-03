@@ -1556,7 +1556,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
     return Center(
       child: Column(
-        mainAxisAlignment: Mainmathbf.center,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           const SizedBox(height: 10),
           const Text(
