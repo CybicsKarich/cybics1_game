@@ -1548,8 +1548,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
 
-
-    Widget _buildCreatedLevelsMenu() {
+  Widget _buildCreatedLevelsMenu() {
     final List<Color> diffColors = [
       const Color(0xFF38BDF8), const Color(0xFF4ADE80), const Color(0xFFFACC15),
       const Color(0xFFEA580C), const Color(0xFFEF4444), const Color(0xFF8B5CF6)
@@ -1557,7 +1556,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
     return Center(
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisAlignment: Mainmathbf.center,
         children: [
           const SizedBox(height: 10),
           const Text(
@@ -1570,7 +1569,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // Твой центральный большой короб
               Container(
                 width: 420, 
                 height: 220,
@@ -1579,7 +1577,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                   border: Border.all(color: const Color(0xFF06B6D4), width: 2), 
                   borderRadius: BorderRadius.circular(16),
                 ),
-                // ИСПРАВЛЕНИЕ: Если уровней нет — пишем текст, если есть — выводим список плашек
                 child: _myCreatedLevels.isEmpty
                     ? const Center(
                         child: Text(
@@ -1594,7 +1591,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                           final lvl = _myCreatedLevels[index];
                           return Container(
                             margin: const EdgeInsets.symmetric(vertical: 5),
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                             decoration: BoxDecoration(
                               color: const Color(0xFF0F172A),
                               borderRadius: BorderRadius.circular(10),
@@ -1602,11 +1599,50 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                             ),
                             child: Row(
                               children: [
-                                // Кнопка "Редактировать" на левой стороне (пока заблокирована - null)
-                                _buildBtn('Редактировать', null, isSecondary: true, minWidth: 120),
+                                // ИСПРАВЛЕНИЕ: Колонка из двух уменьшенных кнопок слева (Редактировать и Удалить)
+                                Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    // Кнопка Редактировать (уменьшенная до 125px, текст влезает в одну строку)
+                                    _buildBtn('Редактировать', null, isSecondary: true, minWidth: 125),
+                                    const SizedBox(height: 4),
+                                    // Кнопка Удалить с защитным окном подтверждения
+                                    _buildBtn('Удалить', () {
+                                      // Вызываем всплывающее окно подтверждения
+                                      showDialog(
+                                        context: context,
+                                        barrierDismissible: false, // Нельзя закрыть тапком мимо окна
+                                        builder: (BuildContext context) {
+                                          return AlertDialog(
+                                            backgroundColor: const Color(0xFF1E293B),
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                            title: const Text('Удаление', style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.bold)),
+                                            content: const Text('Вы точно хотите удалить этот уровень?', style: TextStyle(color: Colors.white)),
+                                            actions: [
+                                              TextButton(
+                                                child: const Text('ОТМЕНА', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+                                                onPressed: () => Navigator.of(context).pop(), // Просто закрываем окно
+                                              ),
+                                              TextButton(
+                                                child: const Text('ДА, УДАЛИТЬ', style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.bold)),
+                                                onPressed: () {
+                                                  setState(() {
+                                                    _myCreatedLevels.removeAt(index); // Удаляем уровень из списка
+                                                    _saveCustomLevelsToPrefs(); // Перезаписываем память устройства
+                                                  });
+                                                  Navigator.of(context).pop(); // Закрываем окно
+                                                },
+                                              ),
+                                            ],
+                                          );
+                                        },
+                                      );
+                                    }, isSecondary: true, minWidth: 125),
+                                  ],
+                                ),
                                 const SizedBox(width: 12),
                                 
-                                // Текстовый блок: Имя и ID уровня
+                                // Текстовый блок (Имя, Номер, Прогресс)
                                 Expanded(
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1616,13 +1652,12 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                                         style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
                                         maxLines: 1, overflow: TextOverflow.ellipsis,
                                       ),
-                                      const SizedBox(height: 4),
+                                      const SizedBox(height: 2),
                                       Text(
                                         'Номер: ${lvl.id}', 
                                         style: const TextStyle(fontSize: 11, color: Colors.grey),
                                       ),
-                                      const SizedBox(height: 6),
-                                      // Полоса прогресса уровня
+                                      const SizedBox(height: 4),
                                       ClipRRect(
                                         borderRadius: BorderRadius.circular(4),
                                         child: Stack(
@@ -1640,7 +1675,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                                 ),
                                 const SizedBox(width: 10),
                                 
-                                // Круг сложности справа от текста
+                                // Круг сложности
                                 SizedBox(
                                   width: 32,
                                   height: 32,
@@ -1679,6 +1714,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       ),
     );
   }
+
 
 
   Widget _buildNewLevelMenu() {
@@ -1790,40 +1826,50 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             
                         const SizedBox(height: 25),
             
-            // ИСПРАВЛЕНИЕ: Теперь здесь ТРИ кнопки в ряд, как ты и просил!
+            // Ряд из трех кнопок
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // 1. Кнопка Создать — пока заблокирована (null), в будущем откроет редактор
+                // 1. Кнопка Создать (пока null)
                 _buildBtn('Создать', null, minWidth: 140), 
                 
                 const SizedBox(width: 15),
                 
-                // 2. Кнопка Сохранить — берет данные, записывает в память и закрывает меню
-                _buildBtn('Сохранить', () {
-                  String enteredName = _levelNameController.text.trim();
-                  if (enteredName.isEmpty) enteredName = "Без названия";
+                // 2. ИСПРАВЛЕНИЕ: Кнопка Сохранить обёрнута в зелёный неон со свечением
+                Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(25),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF22C55E).withOpacity(0.4), // Зелёное свечение
+                        blurRadius: 15,
+                        offset: const Offset(0, 4),
+                      )
+                    ],
+                  ),
+                  child: _buildBtn('Сохранить', () {
+                    String enteredName = _levelNameController.text.trim();
+                    if (enteredName.isEmpty) enteredName = "Без названия";
 
-                  // Генерируем уникальный 4-значный номер для поиска уровней
-                  var rand = math.Random();
-                  String generatedId = "#${1000 + rand.nextInt(9000)}";
+                    var rand = math.Random();
+                    String generatedId = "#${1000 + rand.nextInt(9000)}";
 
-                  setState(() {
-                    // Создаем карточку уровня и добавляем в список сохраненных
-                    _myCreatedLevels.add(CustomLevel(
-                      id: generatedId,
-                      name: enteredName,
-                      difficultyIndex: _selectedDifficultyIndex,
-                    ));
-                    _saveCustomLevelsToPrefs(); // Записываем в SharedPreferences
-                    _state = GameState.createdLevelsMenu; // Перекидываем обратно в созданные уровни
-                  });
-                  FocusScope.of(context).unfocus(); // Прячем клавиатуру
-                }, minWidth: 140),
+                    setState(() {
+                      _myCreatedLevels.add(CustomLevel(
+                        id: generatedId,
+                        name: enteredName,
+                        difficultyIndex: _selectedDifficultyIndex,
+                      ));
+                      _saveCustomLevelsToPrefs(); 
+                      _state = GameState.createdLevelsMenu; 
+                    });
+                    FocusScope.of(context).unfocus(); 
+                  }, minWidth: 140),
+                ),
                 
                 const SizedBox(width: 15),
                 
-                // 3. Кнопка Отмена — просто уводит назад
+                // 3. Кнопка Отмена
                 _buildBtn('Отмена', () {
                   FocusScope.of(context).unfocus();
                   setState(() { _state = GameState.createdLevelsMenu; });
@@ -2184,7 +2230,17 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           disabledForegroundColor: Colors.white38, 
         ),
         onPressed: onPressed, // Сюда теперь безопасно прилетит null
-        child: Text(text, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+                // ИСПРАВЛЕНИЕ: Если кнопка узкая (меньше 130px), уменьшаем шрифт до 12, чтобы текст влезал в одну строку
+        child: Text(
+          text, 
+          style: TextStyle(
+            fontSize: minWidth < 135 ? 12 : 18, 
+            fontWeight: FontWeight.bold, 
+            color: Colors.white
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
       ),
     );
   }
