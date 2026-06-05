@@ -1786,13 +1786,12 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     _redoHistory.clear();
   }
 
-    Widget _buildLevelEditor() {
+      Widget _buildLevelEditor() {
     bool canUndo = _undoHistory.isNotEmpty;
     bool canRedo = _redoHistory.isNotEmpty;
 
     return Stack(
       children: [
-        // Интерактивный холст сетки (Ловит скролл и клики по пикселям дисплея)
         Positioned.fill(
           child: GestureDetector(
             onHorizontalDragUpdate: (details) {
@@ -1804,25 +1803,23 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               if (_currentEditingLevel == null || _isPaused) return;
 
               RenderBox renderBox = context.findRenderObject() as RenderBox;
-              double scale = renderBox.size.height / _gameHeight;
+              double currentScreenHeight = renderBox.size.height;
+              double scale = currentScreenHeight / _gameHeight;
 
               double rawX = details.localPosition.dx / scale;
               double rawY = details.localPosition.dy / scale;
 
               if (rawY >= _floorY || rawY < 60) return;
 
-              // Grid Snapping: привязка к ровным линиям 30x30 пикселей с учетом скролла камеры
               double step = 30.0;
               double worldX = (((rawX + _editorCameraX) / step).floor() * step);
               double worldY = ((rawY / step).floor() * step);
 
-              _takeSnapshot(); // Запись снимка для отмены действия (Undo)
+              _takeSnapshot();
 
               setState(() {
-                // ЛОГИКА ЛАСТИКА (СТЁРКИ)
                 if (_isEraserMode) {
                   bool removed = false;
-                  // Ищем препятствие/платформу по координатам клика
                   for (int i = _currentEditingLevel!.obstacles.length - 1; i >= 0; i--) {
                     var obs = _currentEditingLevel!.obstacles[i];
                     double width = obs.w > 0 ? obs.w : 30.0;
@@ -1833,7 +1830,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                       break;
                     }
                   }
-                  // Если блок не найден, ищем сферы
                   if (!removed) {
                     for (int i = _currentEditingLevel!.orbs.length - 1; i >= 0; i--) {
                       var orb = _currentEditingLevel!.orbs[i];
@@ -1844,7 +1840,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                       }
                     }
                   }
-                  // Если сфера не найдена, ищем медали
                   if (!removed) {
                     for (int i = _currentEditingLevel!.medals.length - 1; i >= 0; i--) {
                       var m = _currentEditingLevel!.medals[i];
@@ -1857,7 +1852,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                   }
                   if (!removed && _undoHistory.isNotEmpty) _undoHistory.removeLast();
                 } 
-                // ЛОГИКА КАРАНДАША (УСТАНОВКА ПОСТРОЕК)
                 else {
                   if (_editorSelectedTool.startsWith('platform')) {
                     double width = 60;
@@ -1882,7 +1876,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                     _currentEditingLevel!.obstacles.add(Obstacle(type: 'portal_grav', x: worldX, y: worldY, w: 40, h: 120));
                   } 
                   else if (_editorSelectedTool == 'medal') {
-                    // Строгий лимит: максимум 3 медали на кастомную карту!
                     if (_currentEditingLevel!.medals.length < 3) {
                       int nextId = _currentEditingLevel!.medals.length;
                       _currentEditingLevel!.medals.add(Medal(id: nextId, x: worldX + 15, y: worldY + 15));
@@ -1908,15 +1901,15 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           ),
         ),
 
-        // Слой левых кнопок стрелок Undo/Redo
         Positioned(
           top: 15,
           left: 15,
           child: Column(
             children: [
+              // ИСПРАВЛЕНИЕ: backgroundColor перенесен в style: IconButton.styleFrom
               IconButton(
                 icon: Icon(Icons.undo, size: 36, color: canUndo ? const Color(0xFF22C55E) : Colors.grey),
-                backgroundColor: canUndo ? Colors.black45 : Colors.black12,
+                style: IconButton.styleFrom(backgroundColor: canUndo ? Colors.black45 : Colors.black12),
                 onPressed: !canUndo ? null : () {
                   setState(() {
                     _redoHistory.add(jsonEncode(_currentEditingLevel!.toJson()));
@@ -1928,7 +1921,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               const SizedBox(height: 10),
               IconButton(
                 icon: Icon(Icons.redo, size: 36, color: canRedo ? const Color(0xFF22C55E) : Colors.grey),
-                backgroundColor: canRedo ? Colors.black45 : Colors.black12,
+                style: IconButton.styleFrom(backgroundColor: canRedo ? Colors.black45 : Colors.black12),
                 onPressed: !canRedo ? null : () {
                   setState(() {
                     _undoHistory.add(jsonEncode(_currentEditingLevel!.toJson()));
@@ -1941,7 +1934,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           ),
         ),
 
-        // Слой правого тулбара (Пауза, Архитектура, Консоль, Стёрка)
         Positioned(
           top: 15,
           right: 15,
@@ -1949,13 +1941,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             children: [
               IconButton(
                 icon: const Icon(Icons.pause, size: 34, color: Colors.white),
-                backgroundColor: Colors.black54,
+                style: IconButton.styleFrom(backgroundColor: Colors.black54),
                 onPressed: () { setState(() { _isPaused = true; }); },
               ),
               const SizedBox(height: 10),
               IconButton(
                 icon: Icon(Icons.architecture, size: 34, color: _isBuildDockOpen ? const Color(0xFF00F2FE) : Colors.white),
-                backgroundColor: Colors.black54,
+                style: IconButton.styleFrom(backgroundColor: Colors.black54),
                 onPressed: () {
                   setState(() { 
                     _isBuildDockOpen = !_isBuildDockOpen;
@@ -1966,7 +1958,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               const SizedBox(height: 10),
               IconButton(
                 icon: const Icon(Icons.terminal, size: 32, color: Colors.amber),
-                backgroundColor: Colors.black54,
+                style: IconButton.styleFrom(backgroundColor: Colors.black54),
                 onPressed: () {
                   _consoleController.clear();
                   setState(() { _state = GameState.editorConsole; });
@@ -1975,7 +1967,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               const SizedBox(height: 10),
               IconButton(
                 icon: Icon(Icons.auto_fix_normal, size: 32, color: _isEraserMode ? Colors.red : Colors.white),
-                backgroundColor: _isEraserMode ? Colors.red.withOpacity(0.3) : Colors.black54,
+                style: IconButton.styleFrom(backgroundColor: _isEraserMode ? Colors.red.withOpacity(0.3) : Colors.black54),
                 onPressed: () {
                   setState(() { 
                     _isEraserMode = !_isEraserMode; 
@@ -2004,8 +1996,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
 
-
-    Widget _buildEditorBuildDock() {
+  Widget _buildEditorBuildDock() {
     final List<Map<String, String>> tools = [
       {'id': 'platform_1', 'name': 'Платформа XS'},
       {'id': 'platform_2', 'name': 'Платформа S'},
@@ -2027,8 +2018,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       right: 0,
       child: Container(
         height: 100,
-        color: const Color(0xFF0F172A).withOpacity(0.95),
-        border: const Border(top: BorderSide(color: Color(0xFF06B6D4), width: 2)),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0F172A).withOpacity(0.95),
+          border: const Border(top: BorderSide(color: Color(0xFF06B6D4), width: 2)),
+        ),
         child: SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
@@ -2061,6 +2054,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       ),
     );
   }
+
 
   Widget _buildEditorPauseOverlay() {
     return Container(
