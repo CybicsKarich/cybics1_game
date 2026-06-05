@@ -93,7 +93,7 @@ class CustomLevel {
   final String name;
   final int difficultyIndex;
   int progress;
-  String selectedMusic; // Выбранный трек уровня ('level1.mp3', 'secret1.mp3' и т.д.)
+  String selectedMusic; 
   List<Obstacle> obstacles;
   List<GameOrb> orbs;
   List<Medal> medals;
@@ -131,13 +131,26 @@ class CustomLevel {
       selectedMusic: json['selectedMusic'] ?? 'level1.mp3',
     );
     if (json['obstacles'] != null) {
-      lvl.obstacles = (json['obstacles'] as List).map((e) => Obstacle(type: e['type'], x: e['x'], y: e['y'], w: e['w'] ?? 0, h: e['h'] ?? 0)).toList();
+      lvl.obstacles = (json['obstacles'] as List).map((e) => Obstacle(
+        type: e['type'] ?? 'platform', 
+        x: (e['x'] as num).toDouble(), 
+        y: (e['y'] as num).toDouble(), 
+        w: (e['w'] as num?)?.toDouble() ?? 0, 
+        h: (e['h'] as num?)?.toDouble() ?? 0
+      )).toList();
     }
     if (json['orbs'] != null) {
-      lvl.orbs = (json['orbs'] as List).map((e) => GameOrb(x: e['x'], y: e['y'])).toList();
+      lvl.orbs = (json['orbs'] as List).map((e) => GameOrb(
+        x: (e['x'] as num).toDouble(), 
+        y: (e['y'] as num).toDouble()
+      )).toList();
     }
     if (json['medals'] != null) {
-      lvl.medals = (json['medals'] as List).map((e) => Medal(id: e['id'], x: e['x'], y: e['y'])).toList();
+      lvl.medals = (json['medals'] as List).map((e) => Medal(
+        id: e['id'] as int, 
+        x: (e['x'] as num).toDouble(), 
+        y: (e['y'] as num).toDouble()
+      )).toList();
     }
     return lvl;
   }
@@ -788,10 +801,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
        _generateFixedLevel();
 
-            _generateFixedLevel();
-
-      // ИСПРАВЛЕНИЕ: Если это кастомный уровень (ID = 5), блокируем процедурный спавн 
-      // и принудительно выгружаем из памяти ВСЁ, что игрок построил в редакторе!
       if (_currentLevel == 5 && _currentEditingLevel != null) {
         _obstacles = List.from(_currentEditingLevel!.obstacles);
         _orbs = List.from(_currentEditingLevel!.orbs);
@@ -802,12 +811,16 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         for (var orb in _orbs) { if (orb.x > farthestX) farthestX = orb.x; }
         for (var m in _medals) { if (m.x > farthestX) farthestX = m.x; }
         
-        _levelLength = farthestX + 800.0; // Финал сдвигается автоматически
+        _levelLength = farthestX + 800.0; 
+        
+        // ИСПРАВЛЕНИЕ: Перезапускаем трек, выбранный игроком, с самого начала, не сбрасывая его на level1.mp3
+        _level1Player.stop();
+        _level1Player.seek(Duration.zero);
+        _level1Player.play(AssetSource(_currentEditingLevel!.selectedMusic));
       } else {
-        _levelLength = 20000.0; // Стандартные уровни
+        _levelLength = 20000.0; 
       }
-
-    });
+   });
 
         _gameTimer = Timer.periodic(const Duration(milliseconds: 16), (timer) {
   if (_isPlaying && !_isPaused) {
@@ -1147,7 +1160,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     } else if (_currentLevel == 4 && _currentProgress > _maxProgress4 && _currentProgress < 100) {
       _maxProgress4 = _currentProgress; _prefs.setInt('cybics_max_progress_4', _maxProgress4); isNewRecord = true;
     }
-
+ // ИСПРАВЛЕНИЕ: Обновляем и сохраняем прогресс-бар для созданного уровня
+      if (_currentProgress > _currentEditingLevel!.progress) {
+        _currentEditingLevel!.progress = _currentProgress;
+        _saveCustomLevelsToPrefs(); // Жесткая запись на диск
+        isNewRecord = true;
+      }
+    
     _collectedThisRun.clear(); // Монеты сгорают при смерти!
 
     if (!mounted) return; 
@@ -1917,8 +1936,15 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
                     _currentEditingLevel!.obstacles.add(Obstacle(type: 'platform', x: worldX, y: worldY, w: width, h: 30));
                   } 
-                  else if (_editorSelectedTool.startsWith('spike')) {
+                                    else if (_editorSelectedTool == 'spike_normal') {
                     _currentEditingLevel!.obstacles.add(Obstacle(type: 'spike', x: worldX, y: worldY + 30));
+                  } 
+                  else if (_editorSelectedTool == 'spike_mark') {
+                    _currentEditingLevel!.obstacles.add(Obstacle(type: 'spike_mark', x: worldX, y: worldY + 30));
+                  } 
+                  else if (_editorSelectedTool == 'spike_upside') {
+                    // Перевернутый шип ставится острием вниз от верхней кромки сетки
+                    _currentEditingLevel!.obstacles.add(Obstacle(type: 'spike_upside', x: worldX, y: worldY));
                   } 
                   else if (_editorSelectedTool == 'orb_1') {
                     _currentEditingLevel!.orbs.add(GameOrb(x: worldX + 15, y: worldY + 15));
@@ -2057,9 +2083,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       {'id': 'platform_3', 'name': 'Платформа M'},
       {'id': 'platform_4', 'name': 'Платформа L'},
       {'id': 'platform_5', 'name': 'Платформа XL'},
-      {'id': 'spike_1', 'name': 'Малый шип'},
-      {'id': 'spike_2', 'name': 'Средний шип'},
-      {'id': 'spike_3', 'name': 'Большой шип'},
+      {'id': 'spike_normal', 'name': 'Шип обычный'},
+      {'id': 'spike_mark', 'name': 'Шип с [!]'},
+      {'id': 'spike_upside', 'name': 'Шип перевёрнутый'},
       {'id': 'orb_1', 'name': 'Сфера прыжка'},
       {'id': 'portal_ship', 'name': 'Портал Корабля'},
       {'id': 'portal_grav', 'name': 'Портал Инверсии'},
@@ -3449,7 +3475,7 @@ class EditorBackgroundPainter extends CustomPainter {
     required this.currentLevelData,
   });
 
-  @override
+   @override
   void paint(Canvas canvas, Size size) {
     double scale = size.height / gameHeight;
     canvas.save();
@@ -3482,7 +3508,28 @@ class EditorBackgroundPainter extends CustomPainter {
       canvas.drawLine(Offset(0, y), Offset(size.width / scale, y), paint);
     }
 
-        // 3. ОТРИСОВКА ВСЕХ ПОСТРОЕК НА СЕТКЕ В РЕАЛЬНОМ ВРЕМЕНИ
+    // ==========================================
+    // ИСПРАВЛЕНИЕ: ОТРИСОВКА КРАСНОГО ФЛАЖКА СПАВНА
+    // ==========================================
+    double flagRenderX = 100.0 - cameraX;
+    if (flagRenderX > -50 && flagRenderX < (size.width / scale) + 50) {
+      paint.style = PaintingStyle.stroke;
+      paint.color = Colors.grey;
+      paint.strokeWidth = 3;
+      // Флагшток кубика
+      canvas.drawLine(Offset(flagRenderX, floorY), Offset(flagRenderX, floorY - 50), paint);
+      
+      paint.style = PaintingStyle.fill;
+      paint.color = const Color(0xFFEF4444); // Красное полотно флажка
+      Path flagCloth = Path()
+        ..moveTo(flagRenderX, floorY - 50)
+        ..lineTo(flagRenderX + 20, floorY - 40)
+        ..lineTo(flagRenderX, floorY - 30)
+        ..close();
+      canvas.drawPath(flagCloth, paint);
+    }
+
+    // 3. ОТРИСОВКА ПОСТРОЕК НА СЕТКЕ
     if (currentLevelData != null) {
       for (var obs in currentLevelData!.obstacles) {
         double renderX = obs.x - cameraX;
@@ -3497,6 +3544,7 @@ class EditorBackgroundPainter extends CustomPainter {
             paint.strokeWidth = 3;
             canvas.drawRect(Rect.fromLTWH(renderX, obs.y, obs.w > 0 ? obs.w : 30, obs.h > 0 ? obs.h : 30), paint);
           } 
+          // ОБЫЧНЫЙ ШИП
           else if (obs.type == 'spike') {
             paint.style = PaintingStyle.fill;
             paint.color = const Color(0xFF0F172A);
@@ -3512,21 +3560,59 @@ class EditorBackgroundPainter extends CustomPainter {
             paint.strokeWidth = 2.5;
             canvas.drawPath(spikePath, paint);
           }
-          // ИСПРАВЛЕНИЕ: Красивые неоновые овалы порталов с градиентной заливкой!
+          // ШИП С ВОСКЛИЦАТЕЛЬНЫМ ЗНАКОМ [!]
+          else if (obs.type == 'spike_mark') {
+            paint.style = PaintingStyle.fill;
+            paint.color = const Color(0xFF0F172A);
+            Path spikePath = Path()
+              ..moveTo(renderX, obs.y)
+              ..lineTo(renderX + 30, obs.y)
+              ..lineTo(renderX + 15, obs.y - 30)
+              ..close();
+            canvas.drawPath(spikePath, paint);
+
+            paint.style = PaintingStyle.stroke;
+            paint.color = const Color(0xFFFACC15); // Жёлтый контур знака опасности
+            paint.strokeWidth = 2.5;
+            canvas.drawPath(spikePath, paint);
+
+            // Отрисовка знака [!]
+            paint.style = PaintingStyle.fill;
+            paint.color = const Color(0xFFEA580C);
+            canvas.drawRect(Rect.fromLTWH(renderX + 13, obs.y - 22, 4, 8), paint);
+            canvas.drawCircle(Offset(renderX + 15, obs.y - 8), 2, paint);
+          }
+          // ПЕРЕВЕРНУТЫЙ ШИП НА ПОТОЛКЕ
+          else if (obs.type == 'spike_upside') {
+            paint.style = PaintingStyle.fill;
+            paint.color = const Color(0xFF0F172A);
+            Path spikePath = Path()
+              ..moveTo(renderX, obs.y)
+              ..lineTo(renderX + 30, obs.y)
+              ..lineTo(renderX + 15, obs.y + 30) // Острие смотрит строго ВНИЗ
+              ..close();
+            canvas.drawPath(spikePath, paint);
+
+            paint.style = PaintingStyle.stroke;
+            paint.color = const Color(0xFFEF4444); // Суровый красный контур
+            paint.strokeWidth = 2.5;
+            canvas.drawPath(spikePath, paint);
+          }
+          // ПОРТАЛЫ РЕЖИМОВ
           else if (obs.type == 'portal_ship' || obs.type == 'portal_grav') {
             paint.style = PaintingStyle.fill;
             paint.color = obs.type == 'portal_ship' ? const Color(0x66A855F7) : const Color(0x59EAB308);
-            canvas.drawRect(Rect.fromLTWH(renderX - 10, 100, 20, floorY - 100), paint);
+            canvas.drawRect(Rect.fromLTWH(renderX, obs.y, obs.w > 0 ? obs.w : 40, obs.h > 0 ? obs.h : 120), paint);
 
             paint.style = PaintingStyle.stroke;
             paint.color = obs.type == 'portal_ship' ? const Color(0xFFC084FC) : const Color(0xFFFACC15);
             paint.strokeWidth = 5;
-            canvas.drawLine(Offset(renderX, 100), Offset(renderX, floorY), paint);
+            canvas.drawLine(Offset(renderX + 20, obs.y), Offset(renderX + 20, obs.y + (obs.h > 0 ? obs.h : 120)), paint);
           }
         }
       }
 
-      // ИСПРАВЛЕНИЕ: Красивые вращающиеся сферы орбов с неоновым ядром и белым квадратом!
+      // НАСТОЯЩИЙ АРКАДНЫЙ ВИД СФЕР ПРЫЖКА (ОРБОВ)
       for (var orb in currentLevelData!.orbs) {
         double renderX = orb.x - cameraX;
         if (renderX > -50 && renderX < (size.width / scale) + 50) {
@@ -3534,21 +3620,21 @@ class EditorBackgroundPainter extends CustomPainter {
           canvas.translate(renderX, orb.y);
           
           paint.style = PaintingStyle.fill;
-          paint.color = const Color(0xFF00F2FE).withOpacity(0.3);
-          canvas.drawCircle(Offset.zero, 18, paint);
+          paint.color = const Color(0xFF00F2FE).withOpacity(0.3); // Мягкий внешний неоновый ореол
+          canvas.drawCircle(Offset.zero, 22, paint);
 
-          paint.color = const Color(0xFF00F2FE);
-          canvas.drawCircle(Offset.zero, 12, paint);
+          paint.color = const Color(0xFF00F2FE); // Ядро сферы прыжка
+          canvas.drawCircle(Offset.zero, 14, paint);
 
           paint.style = PaintingStyle.stroke;
           paint.color = Colors.white;
-          paint.strokeWidth = 1.5;
-          canvas.drawRect(Rect.fromCenter(center: Offset.zero, width: 12, height: 12), paint);
+          paint.strokeWidth = 2; // Белый внутренний ободок
+          canvas.drawRect(Rect.fromCenter(center: Offset.zero, width: 14, height: 14), paint);
           canvas.restore();
         }
       }
 
-      // ИСПРАВЛЕНИЕ: Золотые медали с белым внутренним ромбом-кристаллом!
+      // МЕДАЛИ (МОНЕТЫ)
       for (var m in currentLevelData!.medals) {
         double renderX = m.x - cameraX;
         if (renderX > -50 && renderX < (size.width / scale) + 50) {
@@ -3574,8 +3660,7 @@ class EditorBackgroundPainter extends CustomPainter {
       }
     }
 
-
-    // 4. Фиксированная линия пола
+    // 4. Линия пола
     double maxFloorW = (levelLength - cameraX).clamp(0, size.width / scale);
     if (maxFloorW > 0) {
       paint.style = PaintingStyle.fill;
