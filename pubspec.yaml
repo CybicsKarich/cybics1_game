@@ -1,5 +1,5 @@
 name: cybics_game
-description: "Cybics Game built with Flutter"
+description: "cybics game built with flutter"
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -14,7 +14,7 @@ dependencies:
 
 flutter:
   uses-material-design: true
-    assets:
+  assets:
     - assets/menu.mp3
     - assets/level1.mp3
     - assets/level2.mp3
@@ -27,4 +27,3 @@ flutter:
     - assets/level9.mp3
     - assets/death.mp3
     - assets/god.mp3
-
