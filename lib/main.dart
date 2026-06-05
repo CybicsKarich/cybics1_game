@@ -2165,14 +2165,17 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
 
-    Widget _buildEditorConsole() {
+      Widget _buildEditorConsole() {
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(vertical: 20),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Text('Командная строка', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.amber, letterSpacing: 1.5)),
+            const Text(
+              'Командная строка', 
+              style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.amber, letterSpacing: 1.5)
+            ),
             const SizedBox(height: 20),
             SizedBox(
               width: 400,
@@ -2185,34 +2188,41 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                   hintStyle: TextStyle(color: Colors.green.withOpacity(0.3)),
                   filled: true,
                   fillColor: Colors.black,
-                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.green)),
-                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.amber, width: 2)),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12), 
+                    borderSide: const BorderSide(color: Colors.green)
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12), 
+                    borderSide: const BorderSide(color: Colors.amber, width: 2)
+                  ),
                 ),
               ),
             ),
-          ),
-          const SizedBox(height: 20),
-          _buildBtn('Активировать', () {
-            String code = _consoleController.text.trim();
-            if (code == "musicforlevelsunlock") {
-              setState(() {
-                _areSecretTracksUnlocked = true; 
-                _state = GameState.editorTracksMenu; 
-              });
-            } else {
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Неверный чит-код')));
-            }
-            FocusScope.of(context).unfocus();
-          }),
-          const SizedBox(height: 10),
-          _buildBtn('Назад', () {
-            FocusScope.of(context).unfocus();
-            setState(() { _state = GameState.editor; }); 
-          }, isSecondary: true, minWidth: 180),
-        ],
+            const SizedBox(height: 20),
+            _buildBtn('Активировать', () {
+              String code = _consoleController.text.trim();
+              if (code == "musicforlevelsunlock") {
+                setState(() {
+                  _areSecretTracksUnlocked = true; 
+                  _state = GameState.editorTracksMenu; 
+                });
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Неверный чит-код')));
+              }
+              FocusScope.of(context).unfocus();
+            }),
+            const SizedBox(height: 10),
+            _buildBtn('Назад', () {
+              FocusScope.of(context).unfocus();
+              setState(() { _state = GameState.editor; }); 
+            }, isSecondary: true, minWidth: 180),
+          ],
+        ),
       ),
     );
   }
+
 
 
   Widget _buildEditorTracksMenu() {
@@ -2266,10 +2276,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       ),
     );
   }
-
-
-
-
 
   Widget _buildNewLevelMenu() {
     // Список данных для наших сложностей
