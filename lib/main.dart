@@ -211,6 +211,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   final TextEditingController _levelNameController = TextEditingController(); // Контроллер названия уровня
   int _selectedDifficultyIndex = 0; // Выбранная сложность (0 - легко, 5 - кошмар)
   List<CustomLevel> _myCreatedLevels = []; // Список всех созданных уровней игрока
+  GameState _customLevelLaunchSource = GameState.createdLevelsMenu; // Запоминает, откуда запустили кастомную карту
   CustomLevel? _currentEditingLevel; // Какой уровень мы сейчас редактируем
   final TextEditingController _consoleController = TextEditingController(); // Для командной строки
   bool _areSecretTracksUnlocked = false; // Разблокированы ли новые треки чит-кодом
@@ -787,24 +788,23 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
        _generateFixedLevel();
 
-      // ИСПРАВЛЕНИЕ: Если играем на кастомном уровне, рассчитываем динамический финал по самой дальней постройке!
+            _generateFixedLevel();
+
+      // ИСПРАВЛЕНИЕ: Если это кастомный уровень (ID = 5), блокируем процедурный спавн 
+      // и принудительно выгружаем из памяти ВСЁ, что игрок построил в редакторе!
       if (_currentLevel == 5 && _currentEditingLevel != null) {
-        double farthestX = 2000.0; // Базовая минимальная длина
+        _obstacles = List.from(_currentEditingLevel!.obstacles);
+        _orbs = List.from(_currentEditingLevel!.orbs);
+        _medals = List.from(_currentEditingLevel!.medals);
+
+        double farthestX = 2000.0;
+        for (var obs in _obstacles) { if (obs.x > farthestX) farthestX = obs.x; }
+        for (var orb in _orbs) { if (orb.x > farthestX) farthestX = orb.x; }
+        for (var m in _medals) { if (m.x > farthestX) farthestX = m.x; }
         
-        for (var obs in _currentEditingLevel!.obstacles) {
-          if (obs.x > farthestX) farthestX = obs.x;
-        }
-        for (var orb in _currentEditingLevel!.orbs) {
-          if (orb.x > farthestX) farthestX = orb.x;
-        }
-        for (var m in _currentEditingLevel!.medals) {
-          if (m.x > farthestX) farthestX = m.x;
-        }
-        
-        // Финал сдвигается автоматически ближе к концу построек с отступом в 800px!
-        _levelLength = farthestX + 800.0; 
+        _levelLength = farthestX + 800.0; // Финал сдвигается автоматически
       } else {
-        _levelLength = 20000.0; // Обычные уровни сохраняют стандартную длину
+        _levelLength = 20000.0; // Стандартные уровни
       }
 
     });
@@ -1513,7 +1513,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildSearchResultsMenu() {
+    Widget _buildSearchResultsMenu() {
     final List<Color> diffColors = [
       const Color(0xFF38BDF8), const Color(0xFF4ADE80), const Color(0xFFFACC15),
       const Color(0xFFEA580C), const Color(0xFFEF4444), const Color(0xFF8B5CF6)
@@ -1521,7 +1521,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
     String query = _searchController.text.trim().toLowerCase();
     
-    // ИСПРАВЛЕНИЕ: Ищем совпадения по имени или ID среди сохраненных кастомных уровней
     List<CustomLevel> foundLevels = _myCreatedLevels.where((lvl) {
       return lvl.name.toLowerCase().contains(query) || lvl.id.toLowerCase() == query;
     }).toList();
@@ -1545,7 +1544,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               border: Border.all(color: const Color(0xFF06B6D4), width: 2),
               borderRadius: BorderRadius.circular(16),
             ),
-            // Выводим результаты поиска
             child: foundLevels.isEmpty
                 ? const Center(
                     child: Text(
@@ -1558,54 +1556,70 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                     itemCount: foundLevels.length,
                     itemBuilder: (context, index) {
                       final lvl = foundLevels[index];
-                      return Container(
-                        margin: const EdgeInsets.symmetric(vertical: 5),
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF0F172A),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: const Color(0xFF334155)),
-                        ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    lvl.name, 
-                                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
-                                  ),
-                                  Text('Номер: ${lvl.id}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                                  const SizedBox(height: 4),
-                                  // Полоса прогресса найденного уровня
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(4),
-                                    child: Stack(
-                                      children: [
-                                        Container(height: 6, color: const Color(0xFF334155)),
-                                        FractionallySizedBox(
-                                          widthFactor: lvl.progress / 100.0,
-                                          child: Container(height: 6, color: diffColors[lvl.difficultyIndex]),
-                                        ),
-                                      ],
+                      
+                      // ИСПРАВЛЕНИЕ: Тап по найденной плашке запускает игру со всеми постройками!
+                      return GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _currentEditingLevel = lvl;
+                            _currentLevel = 5;
+                            _customLevelLaunchSource = GameState.searchResultsMenu; // Источник — Поиск!
+                            
+                            _obstacles = List.from(lvl.obstacles);
+                            _orbs = List.from(lvl.orbs);
+                            _medals = List.from(lvl.medals);
+                            
+                            _launchGameplay();
+                          });
+                        },
+                        child: Container(
+                          margin: const EdgeInsets.symmetric(vertical: 5),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF0F172A),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFF334155)),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      lvl.name, 
+                                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
                                     ),
-                                  )
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            SizedBox(
-                              width: 32,
-                              height: 32,
-                              child: CustomPaint(
-                                painter: DifficultyShapePainter(
-                                  difficultyIndex: lvl.difficultyIndex, 
-                                  color: diffColors[lvl.difficultyIndex]
+                                    Text('Номер: ${lvl.id}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                                    const SizedBox(height: 4),
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(4),
+                                      child: Stack(
+                                        children: [
+                                          Container(height: 6, color: const Color(0xFF334155)),
+                                          FractionallySizedBox(
+                                            widthFactor: lvl.progress / 100.0,
+                                            child: Container(height: 6, color: diffColors[lvl.difficultyIndex]),
+                                          ),
+                                        ],
+                                      ),
+                                    )
+                                  ],
                                 ),
                               ),
-                            ),
-                          ],
+                              const SizedBox(width: 10),
+                              SizedBox(
+                                width: 32,
+                                height: 32,
+                                child: CustomPaint(
+                                  painter: DifficultyShapePainter(
+                                    difficultyIndex: lvl.difficultyIndex, 
+                                    color: diffColors[lvl.difficultyIndex]
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       );
                     },
@@ -1621,6 +1635,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       ),
     );
   }
+
 
     Widget _buildCreatedLevelsMenu() {
     final List<Color> diffColors = [
@@ -1670,6 +1685,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                               setState(() {
                                 _currentEditingLevel = lvl;
                                 _currentLevel = 5; // Условный ID, обозначающий кастомную карту в движке
+                                _customLevelLaunchSource = GameState.createdLevelsMenu; // ИСПРАВЛЕНИЕ: Источник — Созданные!
                                 
                                 // Мгновенно копируем объекты из файла уровня в глобальные списки физики игры
                                 _obstacles = List.from(lvl.obstacles);
@@ -2106,10 +2122,23 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             
             _buildBtn('Продолжить', () { setState(() { _isPaused = false; }); }, minWidth: 280),
             
+                        // 2. Сохранить изменения и сразу запустить тест уровня
             _buildBtn('Сохранить и Играть', () {
-              _saveCustomLevelsToPrefs(); 
-              setState(() { _isPaused = false; });
+              _saveCustomLevelsToPrefs(); // Сохраняем на диск
+              setState(() {
+                _isPaused = false;
+                _customLevelLaunchSource = GameState.editor; // После выхода вернемся в редактор
+                _currentLevel = 5;
+                
+                // Переносим постройки в игровой движок
+                _obstacles = List.from(_currentEditingLevel!.obstacles);
+                _orbs = List.from(_currentEditingLevel!.orbs);
+                _medals = List.from(_currentEditingLevel!.medals);
+                
+                _launchGameplay();
+              });
             }, minWidth: 280),
+
             
             _buildBtn('Сохранить и Выйти', () {
               _saveCustomLevelsToPrefs();
@@ -2686,11 +2715,12 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               setState(() { _isPaused = false; });
               _startMusicSequencer();
             }),
-            _buildBtn('В меню', () {
+                        _buildBtn('В меню', () {
               setState(() {
                 _isPlaying = false;
                 _isPaused = false;
-                _state = GameState.levelsMenu;
+                // ИСПРАВЛЕНИЕ: Возвращает туда, откуда зашли (в Поиск, Созданные или Редактор)
+                _state = _currentLevel == 5 ? _customLevelLaunchSource : GameState.levelsMenu;
               });
               _startMusicSequencer();
             }, isSecondary: true),
@@ -2733,10 +2763,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               style: TextStyle(fontSize: 24, color: Colors.white70)
             ),
             const SizedBox(height: 40),
-            // ИСПРАВЛЕНИЕ: Кнопка ручного закрытия экрана победы
-            _buildBtn('ОК', () {
+               _buildBtn('ОК', () {
               setState(() {
-                _state = GameState.levelsMenu;
+                _state = _currentLevel == 5 ? _customLevelLaunchSource : GameState.levelsMenu;
                 _showVictory = false;
               });
               _startMusicSequencer();
