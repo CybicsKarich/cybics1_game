@@ -997,21 +997,26 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       }
     }
 
-    // ИСПРАВЛЕНИЕ: Коллизии шипов теперь обрабатывают ВСЕ новые типы (обычный, с [!], перевёрнутый)
+        // ======================================================================
+    // ИСПРАВЛЕННЫЙ ЦИКЛ А: ОБРАБОТКА ШИПОВ (ОБЫЧНЫЕ, С [!] И ПЕРЕВЁРНУТЫЕ)
+    // ======================================================================
     for (var obs in _obstacles) {
-      if (obs.type != 'spike' && obs.type != 'spike_mark' && obs.type != 'spike_upside') continue;
+      // ИСПРАВЛЕНИЕ: Движок теперь проверяет все 3 типа шипов!
+      if (obs.type != 'spike' && obs.type != 'spike_mark' && obs.type != 'spike_upside') continue; 
       if (obs.x < _player.x - 50 || obs.x > _player.x + 800) continue;
 
+      // Перевёрнутый шип определяется по типу, а не только по высоте
       bool isSpikeUpsideDown = (obs.type == 'spike_upside');
       
+      // Сбалансированный и честный хитбокс шипа
       if (_player.x + _player.size > obs.x + 6 && _player.x < obs.x + 24) {
         if (!isSpikeUpsideDown) {
-          // Обычный шип или шип с [!] (убивают снизу)
+          // Обычный шип или шип с [!] на полу
           if (_player.y + _player.size > obs.y - 35 && _player.y < obs.y) {
             if (!_isGodMode) { _gameOver(); return; }
           }
         } else {
-          // Перевёрнутый шип (убивает сверху на потолке)
+          // Перевёрнутый шип под потолком
           if (_player.y < obs.y + 35 && _player.y + _player.size > obs.y) {
             if (!_isGodMode) { _gameOver(); return; }
           }
@@ -1019,22 +1024,28 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       }
     }
 
-    // ИСПРАВЛЕНИЕ: Коллизии платформ и фиксация ПОРТАЛОВ (самолёт / инверсия)
-    for (var obs in _obstacles) {
-      if (obs.type != 'platform' && obs.type != 'portal_ship' && obs.type != 'portal_grav') continue;
-      if (obs.x + (obs.w > 0 ? obs.w : 40) < _player.x - 100 || obs.x > _player.x + 800) continue;
 
-      // Если кубик коснулся ПОРТАЛА САМОЛЁТИКА — переключаем режим
+        // ======================================================================
+    // ИСПРАВЛЕННЫЙ ЦИКЛ Б: ОБРАБОТКА ПЛАТФОРМ И ПОРТАЛОВ (С ПРАВИЛЬНОЙ СМЕРТЬЮ)
+    // ======================================================================
+    for (var obs in _obstacles) {
+      // Движок обрабатывает и платформы, и порталы кастомных уровней
+      if (obs.type != 'platform' && obs.type != 'portal_ship' && obs.type != 'portal_grav') continue;
+      
+      double width = obs.w > 0 ? obs.w : 30.0;
+      if (obs.x + width < _player.x - 100 || obs.x > _player.x + 800) continue;
+
+      // Триггер портала самолётика
       if (obs.type == 'portal_ship') {
         if (_player.x + _player.size > obs.x && _player.x < obs.x + 40) {
           if (_player.y + _player.size > obs.y && _player.y < obs.y + 120) {
-            _player.isShip = true; // Кубик превращается в самолёт!
+            _player.isShip = true;
           }
         }
         continue; 
       }
 
-      // Если коснулся ПОРТАЛА ИНВЕРСИИ ГРАВИТАЦИИ — переворачиваем кубик
+      // Триггер портала инверсии гравитации
       if (obs.type == 'portal_grav') {
         if (_player.x + _player.size > obs.x && _player.x < obs.x + 40) {
           if (_player.y + _player.size > obs.y && _player.y < obs.y + 120) {
@@ -1044,10 +1055,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         continue;
       }
 
-      // Физика обычных твердых платформ кастомного уровня
       bool stoodOnPlatform = false;
-      double width = obs.w > 0 ? obs.w : 30.0;
 
+      // Честное приземление НА платформу (сверху или снизу в инверсии)
       if (_player.x + _player.size > obs.x + 4 && _player.x < obs.x + width - 4) {
         if (_isGravityInverted) {
           if (_player.vy <= 0 && _player.y <= obs.y + 30 && _player.y >= obs.y + 5) {
@@ -1068,15 +1078,19 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
       if (stoodOnPlatform) continue;
 
+      // ИСПРАВЛЕНИЕ БАГА: Жёсткий удар в торец (бок) платформы — МГНОВЕННЫЙ ПЕРЕЗАПУСК УРОВНЯ!
       if (!_isGodMode) {
         if (_player.x + _player.size > obs.x && _player.x < obs.x + width) {
-          if (_player.y + _player.size > obs.y + 8 && _player.y < obs.y + 30 - 8) {
-            _gameOver();
-            return;
+          // Проверяем, что куб врезался именно в боковую грань по высоте
+          if (_player.y + _player.size > obs.y + 4 && _player.y < obs.y + 26) {
+            _gameOver(); // Кубик гарантированно взрывается, вызывая нормальный рестарт раунда!
+            return; // Мгновенно выходим из физического цикла, чтобы зафиксировать смерть
           }
         }
       }
     }
+
+
 
 
     // Вращение куба в воздухе...
@@ -3100,35 +3114,33 @@ class GamePainter extends CustomPainter {
       }
     }
 
-    // 5.1 Сферы (Орбы) 4 уровня
-    if (currentLevel == 4) {
-      final double orbTime = DateTime.now().millisecondsSinceEpoch * 0.003;
-      final double rotationAngle = orbTime % (math.pi * 2);
+        // 5.1 Сферы (Орбы) — ИСПРАВЛЕНИЕ: Насыщенно-жёлтый аркадный цвет для всех режимов
+    final double orbTime = DateTime.now().millisecondsSinceEpoch * 0.003;
+    final double rotationAngle = orbTime % (math.pi * 2);
 
-      for (var orb in orbs) {
-        double renderX = orb.x - cameraX;
-        if (!orb.collected && renderX > -50 && renderX < (size.width / scale) + 50) {
-          canvas.save();
-          canvas.translate(renderX, orb.y);
-          canvas.rotate(rotationAngle);
-          
-          paint.color = const Color(0xFFFACC15);
-          paint.style = PaintingStyle.stroke;
-          paint.strokeWidth = 3.5;
-          canvas.drawCircle(Offset.zero, 22, paint);
-          
-          paint.strokeWidth = 2.5;
-          canvas.drawLine(const Offset(-15, 0), const Offset(15, 0), paint);
-          canvas.drawLine(const Offset(0, -15), const Offset(0, 15), paint);
-          
-          paint.color = Colors.white;
-          paint.style = PaintingStyle.fill;
-          canvas.drawCircle(Offset.zero, 9, paint);
-          
-          canvas.restore();
-        }
+    for (var orb in orbs) {
+      double renderX = orb.x - cameraX;
+      if (!orb.collected && renderX > -50 && renderX < (size.width / scale) + 50) {
+        canvas.save();
+        canvas.translate(renderX, orb.y);
+        canvas.rotate(rotationAngle);
+        
+        paint.color = const Color(0xFFFACC15); // Настоящий жёлтый цвет Geometry Сферы!
+        paint.style = PaintingStyle.stroke;
+        paint.strokeWidth = 3.5;
+        canvas.drawCircle(Offset.zero, 22, paint);
+        
+        paint.strokeWidth = 2.5;
+        canvas.drawLine(const Offset(-15, 0), const Offset(15, 0), paint);
+        canvas.drawLine(const Offset(0, -15), const Offset(0, 15), paint);
+        
+        paint.color = Colors.white;
+        paint.style = PaintingStyle.fill;
+        canvas.drawCircle(Offset.zero, 9, paint);
+        canvas.restore();
       }
     }
+
 
     // ==========================================
     // ИСПРАВЛЕННЫЙ БЛОК 6: ШЛЕЙФ ДЛЯ ВСЕХ РЕЖИМОВ
@@ -3545,16 +3557,25 @@ class EditorBackgroundPainter extends CustomPainter {
       canvas.drawLine(Offset(0, y), Offset(size.width / scale, y), paint);
     }
 
-    // Красный флажок спавна
+        // ИСПРАВЛЕНИЕ: Гарантированный возврат Красного Флажка спавна на линию пола
     double flagRenderX = 100.0 - cameraX;
-    double flagRenderY = floorY - cameraY; // ИСПРАВЛЕНИЕ: Учитываем камеру Y
     if (flagRenderX > -50 && flagRenderX < (size.width / scale) + 50) {
-      paint.style = PaintingStyle.stroke; paint.color = Colors.grey; paint.strokeWidth = 3;
-      canvas.drawLine(Offset(flagRenderX, flagRenderY + 50), Offset(flagRenderX, flagRenderY), paint);
-      paint.style = PaintingStyle.fill; paint.color = const Color(0xFFEF4444);
-      Path flagCloth = Path()..moveTo(flagRenderX, flagRenderY)..lineTo(flagRenderX + 20, flagRenderY + 10)..lineTo(flagRenderX, flagRenderY + 20)..close();
+      paint.style = PaintingStyle.stroke; 
+      paint.color = Colors.grey; 
+      paint.strokeWidth = 3;
+      // Флагшток стоит строго на полу floorY - cameraY
+      canvas.drawLine(Offset(flagRenderX, floorY - cameraY), Offset(flagRenderX, floorY - cameraY - 50), paint);
+      
+      paint.style = PaintingStyle.fill; 
+      paint.color = const Color(0xFFEF4444);
+      Path flagCloth = Path()
+        ..moveTo(flagRenderX, floorY - cameraY - 50)
+        ..lineTo(flagRenderX + 20, floorY - cameraY - 40)
+        ..lineTo(flagRenderX, floorY - cameraY - 30)
+        ..close();
       canvas.drawPath(flagCloth, paint);
     }
+
 
     // 3. ОТРИСОВКА ПОСТРОЕК НА СЕТКЕ (Вычитаем cameraY из всех координат высоты!)
     if (currentLevelData != null) {
@@ -3597,18 +3618,30 @@ class EditorBackgroundPainter extends CustomPainter {
         }
       }
 
-      // Сферы прыжка
+            // ИСПРАВЛЕНИЕ: Сферы прыжка в редакторе теперь тоже ЖЁЛТЫЕ и полностью соответствуют игре
       for (var orb in currentLevelData!.orbs) {
         double renderX = orb.x - cameraX;
-        double renderY = orb.y - cameraY; // ИСПРАВЛЕНИЕ: Учет высоты
+        double renderY = orb.y - cameraY;
         if (renderX > -50 && renderX < (size.width / scale) + 50) {
-          canvas.save(); canvas.translate(renderX, renderY);
-          paint.style = PaintingStyle.fill; paint.color = const Color(0xFF00F2FE).withOpacity(0.3); canvas.drawCircle(Offset.zero, 22, paint);
-          paint.color = const Color(0xFF00F2FE); canvas.drawCircle(Offset.zero, 14, paint);
-          paint.style = PaintingStyle.stroke; paint.color = Colors.white; paint.strokeWidth = 2; canvas.drawRect(Rect.fromCenter(center: Offset.zero, width: 14, height: 14), paint);
+          canvas.save();
+          canvas.translate(renderX, renderY);
+          
+          paint.style = PaintingStyle.stroke;
+          paint.color = const Color(0xFFFACC15); // Перевели на жёлтый неоновый контур
+          paint.strokeWidth = 3.5;
+          canvas.drawCircle(Offset.zero, 22, paint);
+          
+          paint.strokeWidth = 2.5;
+          canvas.drawLine(const Offset(-15, 0), const Offset(15, 0), paint);
+          canvas.drawLine(const Offset(0, -15), const Offset(0, 15), paint);
+          
+          paint.color = Colors.white;
+          paint.style = PaintingStyle.fill;
+          canvas.drawCircle(Offset.zero, 9, paint);
           canvas.restore();
         }
       }
+
 
       // Медали
       for (var m in currentLevelData!.medals) {
