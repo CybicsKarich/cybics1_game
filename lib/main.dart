@@ -289,7 +289,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     _deathPlayer.setVolume(vol * 0.5);
   }
 
-  void _startMusicSequencer() async {
+    void _startMusicSequencer() async {
     try {
       await _menuPlayer.setReleaseMode(ReleaseMode.loop);
       await _level1Player.setReleaseMode(ReleaseMode.loop);
@@ -302,10 +302,16 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         await _stopAllLevelTracks();
 
         if (!_isPaused) {
-          if (_currentLevel == 1) await _level1Player.play(AssetSource('level1.mp3'));
-          if (_currentLevel == 2) await _level2Player.play(AssetSource('level2.mp3'));
-          if (_currentLevel == 3) await _level3Player.play(AssetSource('level3.mp3'));
-          if (_currentLevel == 4) await _level4Player.play(AssetSource('level4.mp3'));
+          // ИСПРАВЛЕНИЕ: Если играем на кастомном уровне — включаем выбранный в редакторе трек (level5, level6...)
+          if (_currentEditingLevel != null) {
+            await _level1Player.play(AssetSource(_currentEditingLevel!.selectedMusic));
+          } else {
+            // Обычные стандартные уровни игры
+            if (_currentLevel == 1) await _level1Player.play(AssetSource('level1.mp3'));
+            if (_currentLevel == 2) await _level2Player.play(AssetSource('level2.mp3'));
+            if (_currentLevel == 3) await _level3Player.play(AssetSource('level3.mp3'));
+            if (_currentLevel == 4) await _level4Player.play(AssetSource('level4.mp3'));
+          }
         }
       } else {
         await _stopAllLevelTracks();
@@ -315,6 +321,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       debugPrint("Ошибка аудиосеквенсора: $e");
     }
   }
+
 
   Future<void> _stopAllLevelTracks() async {
     try {
@@ -1769,83 +1776,64 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
 
-   // ======================================================================
-  // ШАГ 5: ВЕРСТКА ВСЕГО ИНТЕРФЕЙСА РЕДАКТОРА, ПАУЗЫ И КОМАНДНОЙ СТРОКИ
+    // ======================================================================
+  // ИСПРАВЛЕННЫЙ И ПОДРОБНЫЙ ШАГ 5: ИНТЕРФЕЙС РЕДАКТОРА
   // ======================================================================
 
-  // Метод создания снимка для работы стрелок Отмены (Undo)
   void _takeSnapshot() {
     if (_currentEditingLevel == null) return;
-    // Кодируем текущее состояние уровня в JSON-строку и кладем в историю
     _undoHistory.add(jsonEncode(_currentEditingLevel!.toJson()));
-    _redoHistory.clear(); // Новое действие всегда стирает историю "Вперед"
+    _redoHistory.clear();
   }
 
-  // ЭКРАН 1: Основное окно конструктора уровней
-  Widget _buildLevelEditor() {
-    // Проверяем, есть ли действия в истории, чтобы красить стрелки
+    Widget _buildLevelEditor() {
     bool canUndo = _undoHistory.isNotEmpty;
     bool canRedo = _redoHistory.isNotEmpty;
 
     return Stack(
       children: [
-                // ======================================================================
-        // ИСПРАВЛЕННЫЙ СЛОЙ 1: ХОЛСТ СЕТКИ, СЛУШАЮЩИЙ СКРОЛЛ И НАЖАТИЯ (ПОСТРОЙКА / СТЁРКА)
-        // ======================================================================
+        // Интерактивный холст сетки (Ловит скролл и клики по пикселям дисплея)
         Positioned.fill(
           child: GestureDetector(
-            // Скролл камеры пальцем влево-вправо по длине уровня
             onHorizontalDragUpdate: (details) {
               setState(() {
                 _editorCameraX = (_editorCameraX - details.delta.dx).clamp(0, _levelLength - 800);
               });
             },
-            // ТАП ПО ЭКРАНУ: Просчет установки объекта или его удаления
             onTapDown: (details) {
               if (_currentEditingLevel == null || _isPaused) return;
 
-              // 1. Масштабируем координаты экрана под игровое разрешение (высота движка = 600)
               RenderBox renderBox = context.findRenderObject() as RenderBox;
-              double currentScreenHeight = renderBox.size.height;
-              double scale = currentScreenHeight / _gameHeight;
+              double scale = renderBox.size.height / _gameHeight;
 
               double rawX = details.localPosition.dx / scale;
               double rawY = details.localPosition.dy / scale;
 
-              // Защита: нельзя строить ниже линии пола или в зоне верхнего интерфейса кнопок
               if (rawY >= _floorY || rawY < 60) return;
 
-              // 2. МАТЕМАТИКА МАГНИТНОЙ СЕТКИ (Grid Snapping 30x30 пикселей)
+              // Grid Snapping: привязка к ровным линиям 30x30 пикселей с учетом скролла камеры
               double step = 30.0;
-              // Прибавляем сдвиг камеры _editorCameraX, чтобы получить абсолютную координату мира!
               double worldX = (((rawX + _editorCameraX) / step).floor() * step);
               double worldY = ((rawY / step).floor() * step);
 
-              // Перед изменением записываем текущее состояние карты в историю Undo!
-              _takeSnapshot();
+              _takeSnapshot(); // Запись снимка для отмены действия (Undo)
 
               setState(() {
-                // ==========================================
-                // РЕЖИМ А: ВКЛЮЧЕНА СТЁРКА (ЛАСТИК)
-                // ==========================================
+                // ЛОГИКА ЛАСТИКА (СТЁРКИ)
                 if (_isEraserMode) {
                   bool removed = false;
-
-                  // 1. Ищем и удаляем шипы и платформы в радиусе клика
+                  // Ищем препятствие/платформу по координатам клика
                   for (int i = _currentEditingLevel!.obstacles.length - 1; i >= 0; i--) {
                     var obs = _currentEditingLevel!.obstacles[i];
                     double width = obs.w > 0 ? obs.w : 30.0;
                     double height = obs.h > 0 ? obs.h : 30.0;
-                    
-                    // Проверяем, попал ли клик в границы хитбокса постройки
                     if (worldX >= obs.x && worldX < obs.x + width && worldY >= obs.y && worldY < obs.y + height) {
                       _currentEditingLevel!.obstacles.removeAt(i);
                       removed = true;
                       break;
                     }
                   }
-
-                  // 2. Если блок не найден, ищем и удаляем сферы прыжка
+                  // Если блок не найден, ищем сферы
                   if (!removed) {
                     for (int i = _currentEditingLevel!.orbs.length - 1; i >= 0; i--) {
                       var orb = _currentEditingLevel!.orbs[i];
@@ -1856,8 +1844,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                       }
                     }
                   }
-
-                  // 3. Если сфера не найдена, ищем и удаляем медали
+                  // Если сфера не найдена, ищем медали
                   if (!removed) {
                     for (int i = _currentEditingLevel!.medals.length - 1; i >= 0; i--) {
                       var m = _currentEditingLevel!.medals[i];
@@ -1868,40 +1855,22 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                       }
                     }
                   }
-
-                  // Если игрок кликнул по пустому месту — удаляем снимок из истории, чтобы стрелка не горела зря
-                  if (!removed && _undoHistory.isNotEmpty) {
-                    _undoHistory.removeLast();
-                  }
+                  if (!removed && _undoHistory.isNotEmpty) _undoHistory.removeLast();
                 } 
-                // ==========================================
-                // РЕЖИМ Б: ВКЛЮЧЕН КАРАНДАШ (ПОСТРОЙКА)
-                // ==========================================
+                // ЛОГИКА КАРАНДАША (УСТАНОВКА ПОСТРОЕК)
                 else {
-                  // Вычисляем размеры в зависимости от выбранного инструмента в Build Dock
                   if (_editorSelectedTool.startsWith('platform')) {
                     double width = 60;
-                    if (_editorSelectedTool == 'platform_1') width = 30;  // XS
-                    if (_editorSelectedTool == 'platform_2') width = 60;  // S
-                    if (_editorSelectedTool == 'platform_3') width = 120; // M
-                    if (_editorSelectedTool == 'platform_4') width = 210; // L
-                    if (_editorSelectedTool == 'platform_5') width = 360; // XL
+                    if (_editorSelectedTool == 'platform_1') width = 30;
+                    if (_editorSelectedTool == 'platform_2') width = 60;
+                    if (_editorSelectedTool == 'platform_3') width = 120;
+                    if (_editorSelectedTool == 'platform_4') width = 210;
+                    if (_editorSelectedTool == 'platform_5') width = 360;
 
-                    _currentEditingLevel!.obstacles.add(Obstacle(
-                      type: 'platform', 
-                      x: worldX, 
-                      y: worldY, 
-                      w: width, 
-                      h: 30
-                    ));
+                    _currentEditingLevel!.obstacles.add(Obstacle(type: 'platform', x: worldX, y: worldY, w: width, h: 30));
                   } 
                   else if (_editorSelectedTool.startsWith('spike')) {
-                    // Различаем типы шипов. Координата Y шипа традиционно привязана к его основанию
-                    _currentEditingLevel!.obstacles.add(Obstacle(
-                      type: 'spike', 
-                      x: worldX, 
-                      y: worldY + 30 // Смещаем острие вверх
-                    ));
+                    _currentEditingLevel!.obstacles.add(Obstacle(type: 'spike', x: worldX, y: worldY + 30));
                   } 
                   else if (_editorSelectedTool == 'orb_1') {
                     _currentEditingLevel!.orbs.add(GameOrb(x: worldX + 15, y: worldY + 15));
@@ -1913,12 +1882,11 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                     _currentEditingLevel!.obstacles.add(Obstacle(type: 'portal_grav', x: worldX, y: worldY, w: 40, h: 120));
                   } 
                   else if (_editorSelectedTool == 'medal') {
-                    // ЗАКЛАДКА ДИЗАЙНА: Проверяем строгий лимит в 3 медали на один уровень!
+                    // Строгий лимит: максимум 3 медали на кастомную карту!
                     if (_currentEditingLevel!.medals.length < 3) {
                       int nextId = _currentEditingLevel!.medals.length;
                       _currentEditingLevel!.medals.add(Medal(id: nextId, x: worldX + 15, y: worldY + 15));
                     } else {
-                      // Если лимит превышен — отменяем снимок истории и выводим предупреждение
                       if (_undoHistory.isNotEmpty) _undoHistory.removeLast();
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('Достигнут лимит: Максимум 3 медали на уровень!'))
@@ -1933,41 +1901,36 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                 cameraX: _editorCameraX, 
                 floorY: _floorY, 
                 gameHeight: _gameHeight, 
-                levelLength: _levelLength
+                levelLength: _levelLength,
+                currentLevelData: _currentEditingLevel,
               ),
             ),
           ),
         ),
 
-
-        // 2. ЛЕВЫЙ ВЕРХНИЙ УГОЛ: Стрелки Отмены (Undo) и Повтора (Redo)
+        // Слой левых кнопок стрелок Undo/Redo
         Positioned(
           top: 15,
           left: 15,
           child: Column(
             children: [
-              // Зелёная кнопка НАЗАД (Undo)
               IconButton(
                 icon: Icon(Icons.undo, size: 36, color: canUndo ? const Color(0xFF22C55E) : Colors.grey),
                 backgroundColor: canUndo ? Colors.black45 : Colors.black12,
                 onPressed: !canUndo ? null : () {
                   setState(() {
-                    // Переносим текущее состояние во вкладку "Вперед"
                     _redoHistory.add(jsonEncode(_currentEditingLevel!.toJson()));
-                    // Достаем из истории прошлый снимок и восстанавливаем карту
                     String snapshot = _undoHistory.removeLast();
                     _currentEditingLevel = CustomLevel.fromJson(jsonDecode(snapshot));
                   });
                 },
               ),
               const SizedBox(height: 10),
-              // Зелёная кнопка ВПЕРЕД (Redo)
               IconButton(
                 icon: Icon(Icons.redo, size: 36, color: canRedo ? const Color(0xFF22C55E) : Colors.grey),
                 backgroundColor: canRedo ? Colors.black45 : Colors.black12,
                 onPressed: !canRedo ? null : () {
                   setState(() {
-                    // Возвращаем отмененное действие назад
                     _undoHistory.add(jsonEncode(_currentEditingLevel!.toJson()));
                     String snapshot = _redoHistory.removeLast();
                     _currentEditingLevel = CustomLevel.fromJson(jsonDecode(snapshot));
@@ -1978,34 +1941,29 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           ),
         ),
 
-        // 3. ПРАВЫЙ ВЕРХНИЙ УГОЛ: Кнопки Паузы, Построек, Консоли и Ластика
+        // Слой правого тулбара (Пауза, Архитектура, Консоль, Стёрка)
         Positioned(
           top: 15,
           right: 15,
           child: Column(
             children: [
-              // Кнопка Паузы
               IconButton(
                 icon: const Icon(Icons.pause, size: 34, color: Colors.white),
                 backgroundColor: Colors.black54,
-                onPressed: () {
-                  setState(() { _isPaused = true; }); // Открывает оверлей паузы
-                },
+                onPressed: () { setState(() { _isPaused = true; }); },
               ),
               const SizedBox(height: 10),
-              // Кнопка панели построек (Инструмент архитектуры)
               IconButton(
                 icon: Icon(Icons.architecture, size: 34, color: _isBuildDockOpen ? const Color(0xFF00F2FE) : Colors.white),
                 backgroundColor: Colors.black54,
                 onPressed: () {
                   setState(() { 
                     _isBuildDockOpen = !_isBuildDockOpen;
-                    if (_isBuildDockOpen) _isEraserMode = false; // Выключаем ластик, если строим
+                    if (_isBuildDockOpen) _isEraserMode = false;
                   });
                 },
               ),
               const SizedBox(height: 10),
-              // Жёлтая кнопка Командной строки (Консоль читов)
               IconButton(
                 icon: const Icon(Icons.terminal, size: 32, color: Colors.amber),
                 backgroundColor: Colors.black54,
@@ -2015,14 +1973,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                 },
               ),
               const SizedBox(height: 10),
-              // Кнопка Стёрки (Ластик)
               IconButton(
                 icon: Icon(Icons.auto_fix_normal, size: 32, color: _isEraserMode ? Colors.red : Colors.white),
                 backgroundColor: _isEraserMode ? Colors.red.withOpacity(0.3) : Colors.black54,
                 onPressed: () {
                   setState(() { 
                     _isEraserMode = !_isEraserMode; 
-                    if (_isEraserMode) _isBuildDockOpen = false; // Выключаем постройки, если стираем
+                    if (_isEraserMode) _isBuildDockOpen = false;
                   });
                 },
               ),
@@ -2030,7 +1987,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           ),
         ),
 
-        // Текст-индикатор, если включен Ластик
         if (_isEraserMode)
           Positioned(
             top: 20,
@@ -2042,18 +1998,14 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             ),
           ),
 
-        // 4. НИЖНЯЯ ПАНЕЛЬ ПОСТРОЕК (ВЫЕЗЖАЮЩИЙ ДОК)
         if (_isBuildDockOpen) _buildEditorBuildDock(),
-
-        // 5. ОВЕРЛЕЙ ПАУЗЫ (5 ФУНКЦИОНАЛЬНЫХ КНОПОК)
         if (_isPaused) _buildEditorPauseOverlay(),
       ],
     );
   }
 
-  // ЭКРАН 1.1: Горизонтальный док со всеми блоками и шипами
-  Widget _buildEditorBuildDock() {
-    // Массив всех доступных элементов в конструкторе
+
+    Widget _buildEditorBuildDock() {
     final List<Map<String, String>> tools = [
       {'id': 'platform_1', 'name': 'Платформа XS'},
       {'id': 'platform_2', 'name': 'Платформа S'},
@@ -2076,7 +2028,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       child: Container(
         height: 100,
         color: const Color(0xFF0F172A).withOpacity(0.95),
-        border: const Border(top: BorderSide(color: Color(0xFF06B6D4), width: 2)), // Бирюзовая кромка дока
+        border: const Border(top: BorderSide(color: Color(0xFF06B6D4), width: 2)),
         child: SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
@@ -2084,9 +2036,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             children: tools.map((tool) {
               bool isSelected = _editorSelectedTool == tool['id'];
               return GestureDetector(
-                onTap: () {
-                  setState(() { _editorSelectedTool = tool['id']!; });
-                },
+                onTap: () { setState(() { _editorSelectedTool = tool['id']!; }); },
                 child: Container(
                   margin: const EdgeInsets.symmetric(horizontal: 6),
                   padding: const EdgeInsets.all(8),
@@ -2112,7 +2062,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
 
-  // ЭКРАН 1.2: Меню Паузы внутри редактора (5 Кнопок сохранения/выхода)
   Widget _buildEditorPauseOverlay() {
     return Container(
       color: Colors.black.withOpacity(0.85),
@@ -2123,19 +2072,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             const Text('ПАУЗА РЕДАКТОРА', style: TextStyle(fontSize: 36, color: Color(0xFF00F2FE), fontWeight: FontWeight.bold, letterSpacing: 2)),
             const SizedBox(height: 20),
             
-            // 1. Продолжить создание уровня
-            _buildBtn('Продолжить', () {
-              setState(() { _isPaused = false; });
-            }, minWidth: 280),
+            _buildBtn('Продолжить', () { setState(() { _isPaused = false; }); }, minWidth: 280),
             
-            // 2. Сохранить и сразу играть (Тест карты)
             _buildBtn('Сохранить и Играть', () {
-              _saveCustomLevelsToPrefs(); // Запись на флеш-память
+              _saveCustomLevelsToPrefs(); 
               setState(() { _isPaused = false; });
-              // Код Шага 2 переключит кубик в режим теста
             }, minWidth: 280),
             
-                        // 3. Сохранить изменения и выйти в меню созданных уровней
             _buildBtn('Сохранить и Выйти', () {
               _saveCustomLevelsToPrefs();
               setState(() {
@@ -2144,13 +2087,11 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               });
             }, minWidth: 280),
             
-            // 4. Просто Сохранить изменения (без закрытия редактора)
             _buildBtn('Сохранить изменения', () {
               _saveCustomLevelsToPrefs();
               setState(() { _isPaused = false; });
             }, minWidth: 280),
             
-            // 5. Выйти без сохранения (с защитным диалоговым окном)
             _buildBtn('Выйти без сохранения', () {
               showDialog(
                 context: context,
@@ -2169,16 +2110,15 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                       TextButton(
                         child: const Text('ДА, ВЫЙТИ', style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.bold)),
                         onPressed: () {
-                          // Откатываем память устройства к последней сохраненной точке
                           String? saved = _prefs.getString('cybics_custom_levels');
                           if (saved != null) {
                             List<dynamic> decoded = jsonDecode(saved);
                             _myCreatedLevels = decoded.map((item) => CustomLevel.fromJson(item)).toList();
                           }
-                          Navigator.of(context).pop();
+                          Navigator.of(context).pop(); 
                           setState(() {
                             _isPaused = false;
-                            _state = GameState.createdLevelsMenu;
+                            _state = GameState.createdLevelsMenu; 
                           });
                         },
                       ),
@@ -2193,7 +2133,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
 
-  // --- ЭКРАН 2: МЕНЮ КОМАНДНОЙ СТРОКИ ---
   Widget _buildEditorConsole() {
     return Center(
       child: Column(
@@ -2233,21 +2172,20 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           const SizedBox(height: 10),
           _buildBtn('Назад', () {
             FocusScope.of(context).unfocus();
-            setState(() { _state = GameState.editor; });
+            setState(() { _state = GameState.editor; }); 
           }, isSecondary: true, minWidth: 180),
         ],
       ),
     );
   }
 
-  // --- ЭКРАН 3: СЕКРЕТНОЕ МЕНЮ МУЗЫКАЛЬНЫХ ТРЕКОВ ---
   Widget _buildEditorTracksMenu() {
     final List<String> secretTracks = [
-      'X-Step Remix.mp3',
-      'Clutterfunk Retro.mp3',
-      'Theory of Everything 3.mp3',
-      'Clubstep Bass.mp3',
-      'Blast Processing 8-Bit.mp3'
+      'level5.mp3',
+      'level6.mp3',
+      'level7.mp3',
+      'level8.mp3',
+      'level9.mp3'
     ];
 
     return Center(
@@ -2259,13 +2197,20 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           Container(
             width: 400,
             height: 200,
-            decoration: BoxDecoration(color: const Color(0xFF1E293B), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.amber)),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E293B), 
+              borderRadius: BorderRadius.circular(12), 
+              border: Border.all(color: Colors.amber, width: 1.5)
+            ),
             child: ListView.builder(
               itemCount: secretTracks.length,
               itemBuilder: (context, index) {
                 bool isSelected = _currentEditingLevel?.selectedMusic == secretTracks[index];
                 return ListTile(
-                  title: Text(secretTracks[index], style: TextStyle(color: isSelected ? Colors.amber : Colors.white, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+                  title: Text(
+                    'Аркадный трек №${index + 5} (${secretTracks[index]})', 
+                    style: TextStyle(color: isSelected ? Colors.amber : Colors.white, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)
+                  ),
                   trailing: isSelected ? const Icon(Icons.check_circle, color: Colors.amber) : null,
                   onTap: () {
                     setState(() {
@@ -2285,6 +2230,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       ),
     );
   }
+
+
 
 
 
@@ -3416,6 +3363,139 @@ class DifficultyShapePainter extends CustomPainter {
   }
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+
+// ======================================================================
+// ДОБАВЛЕНИЕ: ОТРИСОВЩИК СЕТКИ И ВСЕХ ПОСТРОЕК ВНУТРИ РЕДАКТОРА С КОРРЕКТНЫМИ ТРЕКАМИ
+// ======================================================================
+class EditorBackgroundPainter extends CustomPainter {
+  final double cameraX;
+  final double floorY;
+  final double gameHeight;
+  final double levelLength;
+  final CustomLevel? currentLevelData; 
+
+  EditorBackgroundPainter({
+    required this.cameraX, 
+    required this.floorY, 
+    required this.gameHeight, 
+    required this.levelLength,
+    required this.currentLevelData,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    double scale = size.height / gameHeight;
+    canvas.save();
+    canvas.scale(scale, scale);
+
+    final Paint paint = Paint();
+
+    // 1. Тёмный фон конструктора (Небо редактора)
+    final Rect bgRect = Rect.fromLTWH(0, 0, size.width / scale, gameHeight);
+    paint.shader = const LinearGradient(
+      colors: [Color(0xFF1E1E2E), Color(0xFF11111B)],
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+    ).createShader(bgRect);
+    canvas.drawRect(bgRect, paint);
+    paint.shader = null;
+
+    // 2. Отрисовка тонкой сетки 30x30px
+    paint.color = Colors.white.withOpacity(0.04); 
+    paint.style = PaintingStyle.stroke;
+    paint.strokeWidth = 1.0;
+    
+    double step = 30.0; 
+    double startGridX = -(cameraX % step);
+    
+    for (double x = startGridX; x < size.width / scale; x += step) {
+      canvas.drawLine(Offset(x, 0), Offset(x, floorY), paint);
+    }
+    for (double y = 0; y < floorY; y += step) {
+      canvas.drawLine(Offset(0, y), Offset(size.width / scale, y), paint);
+    }
+
+    // 3. ОТРИСОВКА ВСЕХ ПОСТРОЕК НА СЕТКЕ В РЕАЛЬНОМ ВРЕМЕНИ
+    if (currentLevelData != null) {
+      for (var obs in currentLevelData!.obstacles) {
+        double renderX = obs.x - cameraX;
+        if (renderX > -200 && renderX < (size.width / scale) + 200) {
+          // Отрисовка платформ разного размера
+          if (obs.type == 'platform') {
+            paint.style = PaintingStyle.fill;
+            paint.color = const Color(0xFF475569);
+            canvas.drawRect(Rect.fromLTWH(renderX, obs.y, obs.w > 0 ? obs.w : 30, obs.h > 0 ? obs.h : 30), paint);
+            
+            paint.style = PaintingStyle.stroke;
+            paint.color = const Color(0xFF00F2FE); 
+            paint.strokeWidth = 1.5;
+            canvas.drawRect(Rect.fromLTWH(renderX, obs.y, obs.w > 0 ? obs.w : 30, obs.h > 0 ? obs.h : 30), paint);
+          } 
+          // Отрисовка шипов
+          else if (obs.type == 'spike') {
+            paint.style = PaintingStyle.fill;
+            paint.color = const Color(0xFF0F172A);
+            Path spikePath = Path()
+              ..moveTo(renderX, obs.y)
+              ..lineTo(renderX + 30, obs.y)
+              ..lineTo(renderX + 15, obs.y - 30)
+              ..close();
+            canvas.drawPath(spikePath, paint);
+
+            paint.style = PaintingStyle.stroke;
+            paint.color = const Color(0xFFEF4444); 
+            paint.strokeWidth = 1.5;
+            canvas.drawPath(spikePath, paint);
+          }
+          // Отрисовка порталов смены режимов
+          else if (obs.type == 'portal_ship' || obs.type == 'portal_grav') {
+            paint.style = PaintingStyle.fill;
+            paint.color = obs.type == 'portal_ship' ? const Color(0xA1A855F7) : const Color(0xA1FACC15);
+            canvas.drawOval(Rect.fromLTWH(renderX, obs.y, 30, 90), paint);
+          }
+        }
+      }
+
+      // Отрисовка сфер прыжка
+      for (var orb in currentLevelData!.orbs) {
+        double renderX = orb.x - cameraX;
+        if (renderX > -50 && renderX < (size.width / scale) + 50) {
+          paint.style = PaintingStyle.fill;
+          paint.color = const Color(0xFF00F2FE);
+          canvas.drawCircle(Offset(renderX, orb.y), 12, paint);
+        }
+      }
+
+      // Отрисовка медалей (монет)
+      for (var m in currentLevelData!.medals) {
+        double renderX = m.x - cameraX;
+        if (renderX > -50 && renderX < (size.width / scale) + 50) {
+          paint.style = PaintingStyle.fill;
+          paint.color = const Color(0xFFF59E0B);
+          canvas.drawCircle(Offset(renderX, m.y), 14, paint);
+        }
+      }
+    }
+
+    // 4. Фиксированная линия пола (Нижняя сдерживающая платформа)
+    double maxFloorW = (levelLength - cameraX).clamp(0, size.width / scale);
+    if (maxFloorW > 0) {
+      paint.style = PaintingStyle.fill;
+      paint.color = const Color(0xFF181825);
+      canvas.drawRect(Rect.fromLTWH(0, floorY, maxFloorW, gameHeight - floorY), paint);
+      
+      paint.color = const Color(0xFF89B4FA);
+      paint.style = PaintingStyle.stroke;
+      paint.strokeWidth = 3;
+      canvas.drawLine(Offset(0, floorY), Offset(maxFloorW, floorY), paint);
+    }
+
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant EditorBackgroundPainter oldDelegate) => true;
+}
 }
 
 
