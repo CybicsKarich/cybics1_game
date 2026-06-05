@@ -14,11 +14,17 @@ dependencies:
 
 flutter:
   uses-material-design: true
-  assets:
+    assets:
     - assets/menu.mp3
     - assets/level1.mp3
     - assets/level2.mp3
     - assets/level3.mp3
     - assets/level4.mp3
+    - assets/level5.mp3
+    - assets/level6.mp3
+    - assets/level7.mp3
+    - assets/level8.mp3
+    - assets/level9.mp3
     - assets/death.mp3
     - assets/god.mp3
+
