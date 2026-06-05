@@ -3262,9 +3262,6 @@ class DifficultyShapePainter extends CustomPainter {
     // ======================================================================
     // ЭТАП 1: ДОПОЛНИТЕЛЬНЫЕ ЭФФЕКТЫ (СВЕЧЕНИЕ И ШИПЫ)
     // ======================================================================
-    
-    // Неоновое свечение для Сложно (3), Невозможно (4) и Кошмар (5)
-    // ИСПРАВЛЕНИЕ: Теперь для "Сложно" оно автоматически станет сочно-оранжевым!
     if (difficultyIndex >= 3) {
       final Paint glowPaint = Paint()
         ..color = color.withOpacity(0.25)
@@ -3272,7 +3269,6 @@ class DifficultyShapePainter extends CustomPainter {
       canvas.drawCircle(Offset(cx, cy), baseRadius + 8, glowPaint);
     }
 
-    // Острые шипы по кругу для "Невозможно" (4) и "Кошмар" (5)
     if (difficultyIndex == 4 || difficultyIndex == 5) {
       final Paint spikePaint = Paint()
         ..color = difficultyIndex == 5 ? const Color(0xFF1E1B4B) : color 
@@ -3319,7 +3315,6 @@ class DifficultyShapePainter extends CustomPainter {
     // ======================================================================
     // ЭТАП 3: ОТРИСОВКА МИМИКИ ЛИЦА
     // ======================================================================
-    
     if (difficultyIndex == 0) {
       canvas.drawCircle(Offset(cx - 5, cy - 3), 2, Paint()..color = const Color(0xFF0F172A));
       canvas.drawCircle(Offset(cx + 5, cy - 3), 2, Paint()..color = const Color(0xFF0F172A));
@@ -3336,7 +3331,6 @@ class DifficultyShapePainter extends CustomPainter {
       canvas.drawLine(Offset(cx - 5, cy + 4), Offset(cx + 5, cy + 4), facePaint);
     } 
     else if (difficultyIndex == 3) {
-      // СЛОЖНО: Оранжево-красный злой смайлик
       canvas.drawLine(Offset(cx - 7, cy - 5), Offset(cx - 2, cy - 3), facePaint);
       canvas.drawLine(Offset(cx + 7, cy - 5), Offset(cx + 2, cy - 3), facePaint);
       canvas.drawArc(Rect.fromCenter(center: Offset(cx, cy + 4), width: 10, height: 6), math.pi, math.pi, false, facePaint);
@@ -3361,11 +3355,13 @@ class DifficultyShapePainter extends CustomPainter {
       canvas.drawPath(madMouth, facePaint);
     }
   }
+
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+}
 
 // ======================================================================
-// ДОБАВЛЕНИЕ: ОТРИСОВЩИК СЕТКИ И ВСЕХ ПОСТРОЕК ВНУТРИ РЕДАКТОРА С КОРРЕКТНЫМИ ТРЕКАМИ
+// ДОБАВЛЕНИЕ: ОТРИСОВЩИК СЕТКИ И ВСЕХ ПОСТРОЕК ВНУТРИ РЕДАКТОРА
 // ======================================================================
 class EditorBackgroundPainter extends CustomPainter {
   final double cameraX;
@@ -3390,7 +3386,7 @@ class EditorBackgroundPainter extends CustomPainter {
 
     final Paint paint = Paint();
 
-    // 1. Тёмный фон конструктора (Небо редактора)
+    // 1. Тёмный фон конструктора
     final Rect bgRect = Rect.fromLTWH(0, 0, size.width / scale, gameHeight);
     paint.shader = const LinearGradient(
       colors: [Color(0xFF1E1E2E), Color(0xFF11111B)],
@@ -3420,7 +3416,6 @@ class EditorBackgroundPainter extends CustomPainter {
       for (var obs in currentLevelData!.obstacles) {
         double renderX = obs.x - cameraX;
         if (renderX > -200 && renderX < (size.width / scale) + 200) {
-          // Отрисовка платформ разного размера
           if (obs.type == 'platform') {
             paint.style = PaintingStyle.fill;
             paint.color = const Color(0xFF475569);
@@ -3431,7 +3426,6 @@ class EditorBackgroundPainter extends CustomPainter {
             paint.strokeWidth = 1.5;
             canvas.drawRect(Rect.fromLTWH(renderX, obs.y, obs.w > 0 ? obs.w : 30, obs.h > 0 ? obs.h : 30), paint);
           } 
-          // Отрисовка шипов
           else if (obs.type == 'spike') {
             paint.style = PaintingStyle.fill;
             paint.color = const Color(0xFF0F172A);
@@ -3447,7 +3441,6 @@ class EditorBackgroundPainter extends CustomPainter {
             paint.strokeWidth = 1.5;
             canvas.drawPath(spikePath, paint);
           }
-          // Отрисовка порталов смены режимов
           else if (obs.type == 'portal_ship' || obs.type == 'portal_grav') {
             paint.style = PaintingStyle.fill;
             paint.color = obs.type == 'portal_ship' ? const Color(0xA1A855F7) : const Color(0xA1FACC15);
@@ -3456,7 +3449,6 @@ class EditorBackgroundPainter extends CustomPainter {
         }
       }
 
-      // Отрисовка сфер прыжка
       for (var orb in currentLevelData!.orbs) {
         double renderX = orb.x - cameraX;
         if (renderX > -50 && renderX < (size.width / scale) + 50) {
@@ -3466,7 +3458,6 @@ class EditorBackgroundPainter extends CustomPainter {
         }
       }
 
-      // Отрисовка медалей (монет)
       for (var m in currentLevelData!.medals) {
         double renderX = m.x - cameraX;
         if (renderX > -50 && renderX < (size.width / scale) + 50) {
@@ -3477,7 +3468,7 @@ class EditorBackgroundPainter extends CustomPainter {
       }
     }
 
-    // 4. Фиксированная линия пола (Нижняя сдерживающая платформа)
+    // 4. Фиксированная линия пола
     double maxFloorW = (levelLength - cameraX).clamp(0, size.width / scale);
     if (maxFloorW > 0) {
       paint.style = PaintingStyle.fill;
@@ -3495,7 +3486,6 @@ class EditorBackgroundPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant EditorBackgroundPainter oldDelegate) => true;
-}
 }
 
 
