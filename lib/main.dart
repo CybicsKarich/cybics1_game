@@ -29,7 +29,7 @@ class CybicsApp extends StatelessWidget {
   }
 }
 
-enum GameState { mainMenu, levelsMenu, settingsMenu, gameplay, customLevelsMenu, downloadedLevelsMenu, searchMenu, searchResultsMenu, createdLevelsMenu, newLevelMenu }
+enum GameState { mainMenu, levelsMenu, settingsMenu, gameplay, customLevelsMenu, downloadedLevelsMenu, searchMenu, searchResultsMenu, createdLevelsMenu, newLevelMenu, editor, editorConsole, editorTracksMenu }
 
 class Obstacle {
   final String type;
@@ -93,29 +93,54 @@ class CustomLevel {
   final String name;
   final int difficultyIndex;
   int progress;
+  String selectedMusic; // Выбранный трек уровня ('level1.mp3', 'secret1.mp3' и т.д.)
+  List<Obstacle> obstacles;
+  List<GameOrb> orbs;
+  List<Medal> medals;
 
   CustomLevel({
     required this.id,
     required this.name,
     required this.difficultyIndex,
     this.progress = 0,
-  });
+    this.selectedMusic = 'level1.mp3',
+    List<Obstacle>? obstacles,
+    List<GameOrb>? orbs,
+    List<Medal>? medals,
+  }) : this.obstacles = obstacles ?? [],
+       this.orbs = orbs ?? [],
+       this.medals = medals ?? [];
 
-  // Превращаем уровень в JSON-карту для сохранения на диск
   Map<String, dynamic> toJson() => {
     'id': id,
     'name': name,
     'difficultyIndex': difficultyIndex,
     'progress': progress,
+    'selectedMusic': selectedMusic,
+    'obstacles': obstacles.map((e) => {'type': e.type, 'x': e.x, 'y': e.y, 'w': e.w, 'h': e.h}).toList(),
+    'orbs': orbs.map((e) => {'x': e.x, 'y': e.y}).toList(),
+    'medals': medals.map((e) => {'id': e.id, 'x': e.x, 'y': e.y}).toList(),
   };
 
-  // Восстанавливаем уровень из JSON-карты при загрузке
-  factory CustomLevel.fromJson(Map<String, dynamic> json) => CustomLevel(
-    id: json['id'],
-    name: json['name'],
-    difficultyIndex: json['difficultyIndex'],
-    progress: json['progress'] ?? 0,
-  );
+  factory CustomLevel.fromJson(Map<String, dynamic> json) {
+    var lvl = CustomLevel(
+      id: json['id'],
+      name: json['name'],
+      difficultyIndex: json['difficultyIndex'],
+      progress: json['progress'] ?? 0,
+      selectedMusic: json['selectedMusic'] ?? 'level1.mp3',
+    );
+    if (json['obstacles'] != null) {
+      lvl.obstacles = (json['obstacles'] as List).map((e) => Obstacle(type: e['type'], x: e['x'], y: e['y'], w: e['w'] ?? 0, h: e['h'] ?? 0)).toList();
+    }
+    if (json['orbs'] != null) {
+      lvl.orbs = (json['orbs'] as List).map((e) => GameOrb(x: e['x'], y: e['y'])).toList();
+    }
+    if (json['medals'] != null) {
+      lvl.medals = (json['medals'] as List).map((e) => Medal(id: e['id'], x: e['x'], y: e['y'])).toList();
+    }
+    return lvl;
+  }
 }
 
 class GameScreen extends StatefulWidget {
@@ -186,6 +211,20 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   final TextEditingController _levelNameController = TextEditingController(); // Контроллер названия уровня
   int _selectedDifficultyIndex = 0; // Выбранная сложность (0 - легко, 5 - кошмар)
   List<CustomLevel> _myCreatedLevels = []; // Список всех созданных уровней игрока
+  CustomLevel? _currentEditingLevel; // Какой уровень мы сейчас редактируем
+  final TextEditingController _consoleController = TextEditingController(); // Для командной строки
+  bool _areSecretTracksUnlocked = false; // Разблокированы ли новые треки чит-кодом
+  
+  // Переменные для режима работы редактора
+  String _editorSelectedTool = 'platform_1'; // Какая постройка выбрана в доке
+  bool _isEraserMode = false; // Включена ли стёрка
+  bool _isBuildDockOpen = false; // Открыта ли панель построек
+  double _editorCameraX = 0; // Сдвиг экрана пальцами в редакторе
+
+  // Истории действий для Undo/Redo (храним снимки списков)
+  final List<String> _undoHistory = [];
+  final List<String> _redoHistory = [];
+
   bool _isPressing = false;
 
   bool _showNewRecord = false;
@@ -1201,6 +1240,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         return _buildCreatedLevelsMenu();
       case GameState.newLevelMenu:
         return _buildNewLevelMenu();
+        // НАШИ НОВЫЕ ЭКРАНЫ РЕДАКТОРА (ШАГ 1):
+      case GameState.editor:
+        return _buildLevelEditor();
+      case GameState.editorConsole:
+        return _buildEditorConsole();
+      case GameState.editorTracksMenu:
+        return _buildEditorTracksMenu();
     }
   }
 
@@ -1603,8 +1649,16 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                                 Column(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    // Кнопка Редактировать (уменьшенная до 125px, текст влезает в одну строку)
-                                    _buildBtn('Редактировать', null, isSecondary: true, minWidth: 125),
+                                     // ИСПРАВЛЕНИЕ: Кнопка стала активной и открывает редактор
+                                    _buildBtn('Редактировать', () {
+                                      setState(() {
+                                        _currentEditingLevel = lvl;
+                                        _editorCameraX = 0;
+                                        _undoHistory.clear();
+                                        _redoHistory.clear();
+                                        _state = GameState.editor;
+                                      });
+                                    }, isSecondary: true, minWidth: 125),
                                     const SizedBox(height: 4),
                                     // Кнопка Удалить с защитным окном подтверждения
                                     _buildBtn('Удалить', () {
@@ -1709,6 +1763,523 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           
           _buildBtn('Назад', () {
             setState(() { _state = GameState.customLevelsMenu; });
+          }, minWidth: 180),
+        ],
+      ),
+    );
+  }
+
+   // ======================================================================
+  // ШАГ 5: ВЕРСТКА ВСЕГО ИНТЕРФЕЙСА РЕДАКТОРА, ПАУЗЫ И КОМАНДНОЙ СТРОКИ
+  // ======================================================================
+
+  // Метод создания снимка для работы стрелок Отмены (Undo)
+  void _takeSnapshot() {
+    if (_currentEditingLevel == null) return;
+    // Кодируем текущее состояние уровня в JSON-строку и кладем в историю
+    _undoHistory.add(jsonEncode(_currentEditingLevel!.toJson()));
+    _redoHistory.clear(); // Новое действие всегда стирает историю "Вперед"
+  }
+
+  // ЭКРАН 1: Основное окно конструктора уровней
+  Widget _buildLevelEditor() {
+    // Проверяем, есть ли действия в истории, чтобы красить стрелки
+    bool canUndo = _undoHistory.isNotEmpty;
+    bool canRedo = _redoHistory.isNotEmpty;
+
+    return Stack(
+      children: [
+                // ======================================================================
+        // ИСПРАВЛЕННЫЙ СЛОЙ 1: ХОЛСТ СЕТКИ, СЛУШАЮЩИЙ СКРОЛЛ И НАЖАТИЯ (ПОСТРОЙКА / СТЁРКА)
+        // ======================================================================
+        Positioned.fill(
+          child: GestureDetector(
+            // Скролл камеры пальцем влево-вправо по длине уровня
+            onHorizontalDragUpdate: (details) {
+              setState(() {
+                _editorCameraX = (_editorCameraX - details.delta.dx).clamp(0, _levelLength - 800);
+              });
+            },
+            // ТАП ПО ЭКРАНУ: Просчет установки объекта или его удаления
+            onTapDown: (details) {
+              if (_currentEditingLevel == null || _isPaused) return;
+
+              // 1. Масштабируем координаты экрана под игровое разрешение (высота движка = 600)
+              RenderBox renderBox = context.findRenderObject() as RenderBox;
+              double currentScreenHeight = renderBox.size.height;
+              double scale = currentScreenHeight / _gameHeight;
+
+              double rawX = details.localPosition.dx / scale;
+              double rawY = details.localPosition.dy / scale;
+
+              // Защита: нельзя строить ниже линии пола или в зоне верхнего интерфейса кнопок
+              if (rawY >= _floorY || rawY < 60) return;
+
+              // 2. МАТЕМАТИКА МАГНИТНОЙ СЕТКИ (Grid Snapping 30x30 пикселей)
+              double step = 30.0;
+              // Прибавляем сдвиг камеры _editorCameraX, чтобы получить абсолютную координату мира!
+              double worldX = (((rawX + _editorCameraX) / step).floor() * step);
+              double worldY = ((rawY / step).floor() * step);
+
+              // Перед изменением записываем текущее состояние карты в историю Undo!
+              _takeSnapshot();
+
+              setState(() {
+                // ==========================================
+                // РЕЖИМ А: ВКЛЮЧЕНА СТЁРКА (ЛАСТИК)
+                // ==========================================
+                if (_isEraserMode) {
+                  bool removed = false;
+
+                  // 1. Ищем и удаляем шипы и платформы в радиусе клика
+                  for (int i = _currentEditingLevel!.obstacles.length - 1; i >= 0; i--) {
+                    var obs = _currentEditingLevel!.obstacles[i];
+                    double width = obs.w > 0 ? obs.w : 30.0;
+                    double height = obs.h > 0 ? obs.h : 30.0;
+                    
+                    // Проверяем, попал ли клик в границы хитбокса постройки
+                    if (worldX >= obs.x && worldX < obs.x + width && worldY >= obs.y && worldY < obs.y + height) {
+                      _currentEditingLevel!.obstacles.removeAt(i);
+                      removed = true;
+                      break;
+                    }
+                  }
+
+                  // 2. Если блок не найден, ищем и удаляем сферы прыжка
+                  if (!removed) {
+                    for (int i = _currentEditingLevel!.orbs.length - 1; i >= 0; i--) {
+                      var orb = _currentEditingLevel!.orbs[i];
+                      if ((worldX - orb.x).abs() < 30 && (worldY - orb.y).abs() < 30) {
+                        _currentEditingLevel!.orbs.removeAt(i);
+                        removed = true;
+                        break;
+                      }
+                    }
+                  }
+
+                  // 3. Если сфера не найдена, ищем и удаляем медали
+                  if (!removed) {
+                    for (int i = _currentEditingLevel!.medals.length - 1; i >= 0; i--) {
+                      var m = _currentEditingLevel!.medals[i];
+                      if ((worldX - m.x).abs() < 30 && (worldY - m.y).abs() < 30) {
+                        _currentEditingLevel!.medals.removeAt(i);
+                        removed = true;
+                        break;
+                      }
+                    }
+                  }
+
+                  // Если игрок кликнул по пустому месту — удаляем снимок из истории, чтобы стрелка не горела зря
+                  if (!removed && _undoHistory.isNotEmpty) {
+                    _undoHistory.removeLast();
+                  }
+                } 
+                // ==========================================
+                // РЕЖИМ Б: ВКЛЮЧЕН КАРАНДАШ (ПОСТРОЙКА)
+                // ==========================================
+                else {
+                  // Вычисляем размеры в зависимости от выбранного инструмента в Build Dock
+                  if (_editorSelectedTool.startsWith('platform')) {
+                    double width = 60;
+                    if (_editorSelectedTool == 'platform_1') width = 30;  // XS
+                    if (_editorSelectedTool == 'platform_2') width = 60;  // S
+                    if (_editorSelectedTool == 'platform_3') width = 120; // M
+                    if (_editorSelectedTool == 'platform_4') width = 210; // L
+                    if (_editorSelectedTool == 'platform_5') width = 360; // XL
+
+                    _currentEditingLevel!.obstacles.add(Obstacle(
+                      type: 'platform', 
+                      x: worldX, 
+                      y: worldY, 
+                      w: width, 
+                      h: 30
+                    ));
+                  } 
+                  else if (_editorSelectedTool.startsWith('spike')) {
+                    // Различаем типы шипов. Координата Y шипа традиционно привязана к его основанию
+                    _currentEditingLevel!.obstacles.add(Obstacle(
+                      type: 'spike', 
+                      x: worldX, 
+                      y: worldY + 30 // Смещаем острие вверх
+                    ));
+                  } 
+                  else if (_editorSelectedTool == 'orb_1') {
+                    _currentEditingLevel!.orbs.add(GameOrb(x: worldX + 15, y: worldY + 15));
+                  } 
+                  else if (_editorSelectedTool == 'portal_ship') {
+                    _currentEditingLevel!.obstacles.add(Obstacle(type: 'portal_ship', x: worldX, y: worldY, w: 40, h: 120));
+                  } 
+                  else if (_editorSelectedTool == 'portal_grav') {
+                    _currentEditingLevel!.obstacles.add(Obstacle(type: 'portal_grav', x: worldX, y: worldY, w: 40, h: 120));
+                  } 
+                  else if (_editorSelectedTool == 'medal') {
+                    // ЗАКЛАДКА ДИЗАЙНА: Проверяем строгий лимит в 3 медали на один уровень!
+                    if (_currentEditingLevel!.medals.length < 3) {
+                      int nextId = _currentEditingLevel!.medals.length;
+                      _currentEditingLevel!.medals.add(Medal(id: nextId, x: worldX + 15, y: worldY + 15));
+                    } else {
+                      // Если лимит превышен — отменяем снимок истории и выводим предупреждение
+                      if (_undoHistory.isNotEmpty) _undoHistory.removeLast();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Достигнут лимит: Максимум 3 медали на уровень!'))
+                      );
+                    }
+                  }
+                }
+              });
+            },
+            child: CustomPaint(
+              painter: EditorBackgroundPainter(
+                cameraX: _editorCameraX, 
+                floorY: _floorY, 
+                gameHeight: _gameHeight, 
+                levelLength: _levelLength
+              ),
+            ),
+          ),
+        ),
+
+
+        // 2. ЛЕВЫЙ ВЕРХНИЙ УГОЛ: Стрелки Отмены (Undo) и Повтора (Redo)
+        Positioned(
+          top: 15,
+          left: 15,
+          child: Column(
+            children: [
+              // Зелёная кнопка НАЗАД (Undo)
+              IconButton(
+                icon: Icon(Icons.undo, size: 36, color: canUndo ? const Color(0xFF22C55E) : Colors.grey),
+                backgroundColor: canUndo ? Colors.black45 : Colors.black12,
+                onPressed: !canUndo ? null : () {
+                  setState(() {
+                    // Переносим текущее состояние во вкладку "Вперед"
+                    _redoHistory.add(jsonEncode(_currentEditingLevel!.toJson()));
+                    // Достаем из истории прошлый снимок и восстанавливаем карту
+                    String snapshot = _undoHistory.removeLast();
+                    _currentEditingLevel = CustomLevel.fromJson(jsonDecode(snapshot));
+                  });
+                },
+              ),
+              const SizedBox(height: 10),
+              // Зелёная кнопка ВПЕРЕД (Redo)
+              IconButton(
+                icon: Icon(Icons.redo, size: 36, color: canRedo ? const Color(0xFF22C55E) : Colors.grey),
+                backgroundColor: canRedo ? Colors.black45 : Colors.black12,
+                onPressed: !canRedo ? null : () {
+                  setState(() {
+                    // Возвращаем отмененное действие назад
+                    _undoHistory.add(jsonEncode(_currentEditingLevel!.toJson()));
+                    String snapshot = _redoHistory.removeLast();
+                    _currentEditingLevel = CustomLevel.fromJson(jsonDecode(snapshot));
+                  });
+                },
+              ),
+            ],
+          ),
+        ),
+
+        // 3. ПРАВЫЙ ВЕРХНИЙ УГОЛ: Кнопки Паузы, Построек, Консоли и Ластика
+        Positioned(
+          top: 15,
+          right: 15,
+          child: Column(
+            children: [
+              // Кнопка Паузы
+              IconButton(
+                icon: const Icon(Icons.pause, size: 34, color: Colors.white),
+                backgroundColor: Colors.black54,
+                onPressed: () {
+                  setState(() { _isPaused = true; }); // Открывает оверлей паузы
+                },
+              ),
+              const SizedBox(height: 10),
+              // Кнопка панели построек (Инструмент архитектуры)
+              IconButton(
+                icon: Icon(Icons.architecture, size: 34, color: _isBuildDockOpen ? const Color(0xFF00F2FE) : Colors.white),
+                backgroundColor: Colors.black54,
+                onPressed: () {
+                  setState(() { 
+                    _isBuildDockOpen = !_isBuildDockOpen;
+                    if (_isBuildDockOpen) _isEraserMode = false; // Выключаем ластик, если строим
+                  });
+                },
+              ),
+              const SizedBox(height: 10),
+              // Жёлтая кнопка Командной строки (Консоль читов)
+              IconButton(
+                icon: const Icon(Icons.terminal, size: 32, color: Colors.amber),
+                backgroundColor: Colors.black54,
+                onPressed: () {
+                  _consoleController.clear();
+                  setState(() { _state = GameState.editorConsole; });
+                },
+              ),
+              const SizedBox(height: 10),
+              // Кнопка Стёрки (Ластик)
+              IconButton(
+                icon: Icon(Icons.auto_fix_normal, size: 32, color: _isEraserMode ? Colors.red : Colors.white),
+                backgroundColor: _isEraserMode ? Colors.red.withOpacity(0.3) : Colors.black54,
+                onPressed: () {
+                  setState(() { 
+                    _isEraserMode = !_isEraserMode; 
+                    if (_isEraserMode) _isBuildDockOpen = false; // Выключаем постройки, если стираем
+                  });
+                },
+              ),
+            ],
+          ),
+        ),
+
+        // Текст-индикатор, если включен Ластик
+        if (_isEraserMode)
+          Positioned(
+            top: 20,
+            left: 100,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              color: Colors.red.withOpacity(0.8),
+              child: const Text('РЕЖИМ СТЁРКИ: Нажмите на объект для удаления', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.white)),
+            ),
+          ),
+
+        // 4. НИЖНЯЯ ПАНЕЛЬ ПОСТРОЕК (ВЫЕЗЖАЮЩИЙ ДОК)
+        if (_isBuildDockOpen) _buildEditorBuildDock(),
+
+        // 5. ОВЕРЛЕЙ ПАУЗЫ (5 ФУНКЦИОНАЛЬНЫХ КНОПОК)
+        if (_isPaused) _buildEditorPauseOverlay(),
+      ],
+    );
+  }
+
+  // ЭКРАН 1.1: Горизонтальный док со всеми блоками и шипами
+  Widget _buildEditorBuildDock() {
+    // Массив всех доступных элементов в конструкторе
+    final List<Map<String, String>> tools = [
+      {'id': 'platform_1', 'name': 'Платформа XS'},
+      {'id': 'platform_2', 'name': 'Платформа S'},
+      {'id': 'platform_3', 'name': 'Платформа M'},
+      {'id': 'platform_4', 'name': 'Платформа L'},
+      {'id': 'platform_5', 'name': 'Платформа XL'},
+      {'id': 'spike_1', 'name': 'Малый шип'},
+      {'id': 'spike_2', 'name': 'Средний шип'},
+      {'id': 'spike_3', 'name': 'Большой шип'},
+      {'id': 'orb_1', 'name': 'Сфера прыжка'},
+      {'id': 'portal_ship', 'name': 'Портал Корабля'},
+      {'id': 'portal_grav', 'name': 'Портал Инверсии'},
+      {'id': 'medal', 'name': 'Медаль (Макс 3)'},
+    ];
+
+    return Positioned(
+      bottom: 0,
+      left: 0,
+      right: 0,
+      child: Container(
+        height: 100,
+        color: const Color(0xFF0F172A).withOpacity(0.95),
+        border: const Border(top: BorderSide(color: Color(0xFF06B6D4), width: 2)), // Бирюзовая кромка дока
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
+          child: Row(
+            children: tools.map((tool) {
+              bool isSelected = _editorSelectedTool == tool['id'];
+              return GestureDetector(
+                onTap: () {
+                  setState(() { _editorSelectedTool = tool['id']!; });
+                },
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 6),
+                  padding: const EdgeInsets.all(8),
+                  width: 120,
+                  decoration: BoxDecoration(
+                    color: isSelected ? const Color(0xFF1E293B) : const Color(0xFF1E1B4B),
+                    border: Border.all(color: isSelected ? const Color(0xFF00F2FE) : Colors.transparent, width: 2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Center(
+                    child: Text(
+                      tool['name']!, 
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: isSelected ? const Color(0xFF00F2FE) : Colors.grey),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ЭКРАН 1.2: Меню Паузы внутри редактора (5 Кнопок сохранения/выхода)
+  Widget _buildEditorPauseOverlay() {
+    return Container(
+      color: Colors.black.withOpacity(0.85),
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text('ПАУЗА РЕДАКТОРА', style: TextStyle(fontSize: 36, color: Color(0xFF00F2FE), fontWeight: FontWeight.bold, letterSpacing: 2)),
+            const SizedBox(height: 20),
+            
+            // 1. Продолжить создание уровня
+            _buildBtn('Продолжить', () {
+              setState(() { _isPaused = false; });
+            }, minWidth: 280),
+            
+            // 2. Сохранить и сразу играть (Тест карты)
+            _buildBtn('Сохранить и Играть', () {
+              _saveCustomLevelsToPrefs(); // Запись на флеш-память
+              setState(() { _isPaused = false; });
+              // Код Шага 2 переключит кубик в режим теста
+            }, minWidth: 280),
+            
+                        // 3. Сохранить изменения и выйти в меню созданных уровней
+            _buildBtn('Сохранить и Выйти', () {
+              _saveCustomLevelsToPrefs();
+              setState(() {
+                _isPaused = false;
+                _state = GameState.createdLevelsMenu;
+              });
+            }, minWidth: 280),
+            
+            // 4. Просто Сохранить изменения (без закрытия редактора)
+            _buildBtn('Сохранить изменения', () {
+              _saveCustomLevelsToPrefs();
+              setState(() { _isPaused = false; });
+            }, minWidth: 280),
+            
+            // 5. Выйти без сохранения (с защитным диалоговым окном)
+            _buildBtn('Выйти без сохранения', () {
+              showDialog(
+                context: context,
+                barrierDismissible: false,
+                builder: (BuildContext context) {
+                  return AlertDialog(
+                    backgroundColor: const Color(0xFF1E293B),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    title: const Text('Выход', style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.bold)),
+                    content: const Text('Вы точно хотите выйти без сохранения? Все последние изменения будут безвозвратно потеряны.', style: TextStyle(color: Colors.white)),
+                    actions: [
+                      TextButton(
+                        child: const Text('ОТМЕНА', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                      TextButton(
+                        child: const Text('ДА, ВЫЙТИ', style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.bold)),
+                        onPressed: () {
+                          // Откатываем память устройства к последней сохраненной точке
+                          String? saved = _prefs.getString('cybics_custom_levels');
+                          if (saved != null) {
+                            List<dynamic> decoded = jsonDecode(saved);
+                            _myCreatedLevels = decoded.map((item) => CustomLevel.fromJson(item)).toList();
+                          }
+                          Navigator.of(context).pop();
+                          setState(() {
+                            _isPaused = false;
+                            _state = GameState.createdLevelsMenu;
+                          });
+                        },
+                      ),
+                    ],
+                  );
+                },
+              );
+            }, isSecondary: true, minWidth: 280),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // --- ЭКРАН 2: МЕНЮ КОМАНДНОЙ СТРОКИ ---
+  Widget _buildEditorConsole() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Text('Командная строка', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.amber, letterSpacing: 1.5)),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: 400,
+            child: TextField(
+              controller: _consoleController,
+              style: const TextStyle(color: Colors.green, fontFamily: 'monospace', fontSize: 16),
+              textAlign: TextAlign.center,
+              decoration: InputDecoration(
+                hintText: 'Введите чит-код...',
+                hintStyle: TextStyle(color: Colors.green.withOpacity(0.3)),
+                filled: true,
+                fillColor: Colors.black,
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.green)),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.amber, width: 2)),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          _buildBtn('Активировать', () {
+            String code = _consoleController.text.trim();
+            if (code == "musicforlevelsunlock") {
+              setState(() {
+                _areSecretTracksUnlocked = true; 
+                _state = GameState.editorTracksMenu; 
+              });
+            } else {
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Неверный чит-код')));
+            }
+            FocusScope.of(context).unfocus();
+          }),
+          const SizedBox(height: 10),
+          _buildBtn('Назад', () {
+            FocusScope.of(context).unfocus();
+            setState(() { _state = GameState.editor; });
+          }, isSecondary: true, minWidth: 180),
+        ],
+      ),
+    );
+  }
+
+  // --- ЭКРАН 3: СЕКРЕТНОЕ МЕНЮ МУЗЫКАЛЬНЫХ ТРЕКОВ ---
+  Widget _buildEditorTracksMenu() {
+    final List<String> secretTracks = [
+      'X-Step Remix.mp3',
+      'Clutterfunk Retro.mp3',
+      'Theory of Everything 3.mp3',
+      'Clubstep Bass.mp3',
+      'Blast Processing 8-Bit.mp3'
+    ];
+
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Text('Выбор музыки уровня', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Color(0xFF00F2FE))),
+          const SizedBox(height: 15),
+          Container(
+            width: 400,
+            height: 200,
+            decoration: BoxDecoration(color: const Color(0xFF1E293B), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.amber)),
+            child: ListView.builder(
+              itemCount: secretTracks.length,
+              itemBuilder: (context, index) {
+                bool isSelected = _currentEditingLevel?.selectedMusic == secretTracks[index];
+                return ListTile(
+                  title: Text(secretTracks[index], style: TextStyle(color: isSelected ? Colors.amber : Colors.white, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+                  trailing: isSelected ? const Icon(Icons.check_circle, color: Colors.amber) : null,
+                  onTap: () {
+                    setState(() {
+                      _currentEditingLevel?.selectedMusic = secretTracks[index];
+                      _takeSnapshot(); 
+                    });
+                  },
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 20),
+          _buildBtn('Назад', () {
+            setState(() { _state = GameState.editor; });
           }, minWidth: 180),
         ],
       ),
