@@ -189,7 +189,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   bool _isPlaying = false;
   bool _isPaused = false;
   
-  final double _levelLength = 20000;
+  double _levelLength = 20000;
   final double _gameHeight = 600;
   final double _floorY = 500;
   
@@ -785,7 +785,28 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         ));
       }
 
-      _generateFixedLevel();
+       _generateFixedLevel();
+
+      // ИСПРАВЛЕНИЕ: Если играем на кастомном уровне, рассчитываем динамический финал по самой дальней постройке!
+      if (_currentLevel == 5 && _currentEditingLevel != null) {
+        double farthestX = 2000.0; // Базовая минимальная длина
+        
+        for (var obs in _currentEditingLevel!.obstacles) {
+          if (obs.x > farthestX) farthestX = obs.x;
+        }
+        for (var orb in _currentEditingLevel!.orbs) {
+          if (orb.x > farthestX) farthestX = orb.x;
+        }
+        for (var m in _currentEditingLevel!.medals) {
+          if (m.x > farthestX) farthestX = m.x;
+        }
+        
+        // Финал сдвигается автоматически ближе к концу построек с отступом в 800px!
+        _levelLength = farthestX + 800.0; 
+      } else {
+        _levelLength = 20000.0; // Обычные уровни сохраняют стандартную длину
+      }
+
     });
 
         _gameTimer = Timer.periodic(const Duration(milliseconds: 16), (timer) {
@@ -1601,7 +1622,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildCreatedLevelsMenu() {
+    Widget _buildCreatedLevelsMenu() {
     final List<Color> diffColors = [
       const Color(0xFF38BDF8), const Color(0xFF4ADE80), const Color(0xFFFACC15),
       const Color(0xFFEA580C), const Color(0xFFEF4444), const Color(0xFF8B5CF6)
@@ -1642,112 +1663,126 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                         itemCount: _myCreatedLevels.length,
                         itemBuilder: (context, index) {
                           final lvl = _myCreatedLevels[index];
-                          return Container(
-                            margin: const EdgeInsets.symmetric(vertical: 5),
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF0F172A),
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: const Color(0xFF334155)),
-                            ),
-                            child: Row(
-                              children: [
-                                // ИСПРАВЛЕНИЕ: Колонка из двух уменьшенных кнопок слева (Редактировать и Удалить)
-                                Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                     // ИСПРАВЛЕНИЕ: Кнопка стала активной и открывает редактор
-                                    _buildBtn('Редактировать', () {
-                                      setState(() {
-                                        _currentEditingLevel = lvl;
-                                        _editorCameraX = 0;
-                                        _undoHistory.clear();
-                                        _redoHistory.clear();
-                                        _state = GameState.editor;
-                                      });
-                                    }, isSecondary: true, minWidth: 125),
-                                    const SizedBox(height: 4),
-                                    // Кнопка Удалить с защитным окном подтверждения
-                                    _buildBtn('Удалить', () {
-                                      // Вызываем всплывающее окно подтверждения
-                                      showDialog(
-                                        context: context,
-                                        barrierDismissible: false, // Нельзя закрыть тапком мимо окна
-                                        builder: (BuildContext context) {
-                                          return AlertDialog(
-                                            backgroundColor: const Color(0xFF1E293B),
-                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                                            title: const Text('Удаление', style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.bold)),
-                                            content: const Text('Вы точно хотите удалить этот уровень?', style: TextStyle(color: Colors.white)),
-                                            actions: [
-                                              TextButton(
-                                                child: const Text('ОТМЕНА', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
-                                                onPressed: () => Navigator.of(context).pop(), // Просто закрываем окно
-                                              ),
-                                              TextButton(
-                                                child: const Text('ДА, УДАЛИТЬ', style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.bold)),
-                                                onPressed: () {
-                                                  setState(() {
-                                                    _myCreatedLevels.removeAt(index); // Удаляем уровень из списка
-                                                    _saveCustomLevelsToPrefs(); // Перезаписываем память устройства
-                                                  });
-                                                  Navigator.of(context).pop(); // Закрываем окно
-                                                },
-                                              ),
-                                            ],
-                                          );
-                                        },
-                                      );
-                                    }, isSecondary: true, minWidth: 125),
-                                  ],
-                                ),
-                                const SizedBox(width: 12),
+                          
+                          // ИСПРАВЛЕНИЕ: Обернули плашку уровня в GestureDetector для фичи "Нажми и Играй"
+                          return GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                _currentEditingLevel = lvl;
+                                _currentLevel = 5; // Условный ID, обозначающий кастомную карту в движке
                                 
-                                // Текстовый блок (Имя, Номер, Прогресс)
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                // Мгновенно копируем объекты из файла уровня в глобальные списки физики игры
+                                _obstacles = List.from(lvl.obstacles);
+                                _orbs = List.from(lvl.orbs);
+                                _medals = List.from(lvl.medals);
+                                
+                                _launchGameplay(); // Запускаем кубик в игру!
+                              });
+                            },
+                            child: Container(
+                              margin: const EdgeInsets.symmetric(vertical: 5),
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF0F172A),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: const Color(0xFF334155)),
+                              ),
+                              child: Row(
+                                children: [
+                                  // Левый блок кнопок управления
+                                  Column(
+                                    mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      Text(
-                                        lvl.name, 
-                                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
-                                        maxLines: 1, overflow: TextOverflow.ellipsis,
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        'Номер: ${lvl.id}', 
-                                        style: const TextStyle(fontSize: 11, color: Colors.grey),
-                                      ),
+                                      _buildBtn('Редактировать', () {
+                                        setState(() {
+                                          _currentEditingLevel = lvl;
+                                          _editorCameraX = 0;
+                                          _undoHistory.clear();
+                                          _redoHistory.clear();
+                                          _state = GameState.editor;
+                                        });
+                                      }, isSecondary: true, minWidth: 125),
                                       const SizedBox(height: 4),
-                                      ClipRRect(
-                                        borderRadius: BorderRadius.circular(4),
-                                        child: Stack(
-                                          children: [
-                                            Container(height: 10, color: const Color(0xFF334155)),
-                                            FractionallySizedBox(
-                                              widthFactor: lvl.progress / 100.0,
-                                              child: Container(height: 10, color: diffColors[lvl.difficultyIndex]),
-                                            ),
-                                          ],
-                                        ),
-                                      )
+                                      _buildBtn('Удалить', () {
+                                        showDialog(
+                                          context: context,
+                                          barrierDismissible: false,
+                                          builder: (BuildContext context) {
+                                            return AlertDialog(
+                                              backgroundColor: const Color(0xFF1E293B),
+                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                              title: const Text('Удаление', style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.bold)),
+                                              content: const Text('Вы точно хотите удалить этот уровень?', style: TextStyle(color: Colors.white)),
+                                              actions: [
+                                                TextButton(
+                                                  child: const Text('ОТМЕНА', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+                                                  onPressed: () => Navigator.of(context).pop(),
+                                                ),
+                                                TextButton(
+                                                  child: const Text('ДА, УДАЛИТЬ', style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.bold)),
+                                                  onPressed: () {
+                                                    setState(() {
+                                                      _myCreatedLevels.removeAt(index);
+                                                      _saveCustomLevelsToPrefs();
+                                                    });
+                                                    Navigator.of(context).pop();
+                                                  },
+                                                ),
+                                              ],
+                                            );
+                                          },
+                                        );
+                                      }, isSecondary: true, minWidth: 125),
                                     ],
                                   ),
-                                ),
-                                const SizedBox(width: 10),
-                                
-                                // Круг сложности
-                                SizedBox(
-                                  width: 32,
-                                  height: 32,
-                                  child: CustomPaint(
-                                    painter: DifficultyShapePainter(
-                                      difficultyIndex: lvl.difficultyIndex, 
-                                      color: diffColors[lvl.difficultyIndex]
+                                  const SizedBox(width: 12),
+                                  
+                                  // Центральный блок текста (Имя, Номер, Прогресс-бар)
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          lvl.name, 
+                                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
+                                          maxLines: 1, overflow: TextOverflow.ellipsis,
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          'Номер: ${lvl.id}', 
+                                          style: const TextStyle(fontSize: 11, color: Colors.grey),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        ClipRRect(
+                                          borderRadius: BorderRadius.circular(4),
+                                          child: Stack(
+                                            children: [
+                                              Container(height: 10, color: const Color(0xFF334155)),
+                                              FractionallySizedBox(
+                                                widthFactor: lvl.progress / 100.0,
+                                                child: Container(height: 10, color: diffColors[lvl.difficultyIndex]),
+                                              ),
+                                            ],
+                                          ),
+                                        )
+                                      ],
                                     ),
                                   ),
-                                ),
-                              ],
+                                  const SizedBox(width: 10),
+                                  
+                                  // Правый блок: иконка-круг сложности
+                                  SizedBox(
+                                    width: 32,
+                                    height: 32,
+                                    child: CustomPaint(
+                                      painter: DifficultyShapePainter(
+                                        difficultyIndex: lvl.difficultyIndex, 
+                                        color: diffColors[lvl.difficultyIndex]
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           );
                         },
@@ -1756,7 +1791,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               
               const SizedBox(width: 20), 
               
-              _buildBtn('Добавить\nуровень', () {
+                            _buildBtn('Добавить\nуровень', () {
                 _levelNameController.clear(); 
                 setState(() { 
                   _selectedDifficultyIndex = 0; 
@@ -1775,6 +1810,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       ),
     );
   }
+
+          
+
 
     // ======================================================================
   // ИСПРАВЛЕННЫЙ И ПОДРОБНЫЙ ШАГ 5: ИНТЕРФЕЙС РЕДАКТОРА
@@ -2127,26 +2165,29 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildEditorConsole() {
+    Widget _buildEditorConsole() {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Text('Командная строка', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.amber, letterSpacing: 1.5)),
-          const SizedBox(height: 20),
-          SizedBox(
-            width: 400,
-            child: TextField(
-              controller: _consoleController,
-              style: const TextStyle(color: Colors.green, fontFamily: 'monospace', fontSize: 16),
-              textAlign: TextAlign.center,
-              decoration: InputDecoration(
-                hintText: 'Введите чит-код...',
-                hintStyle: TextStyle(color: Colors.green.withOpacity(0.3)),
-                filled: true,
-                fillColor: Colors.black,
-                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.green)),
-                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.amber, width: 2)),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text('Командная строка', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.amber, letterSpacing: 1.5)),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: 400,
+              child: TextField(
+                controller: _consoleController,
+                style: const TextStyle(color: Colors.green, fontFamily: 'monospace', fontSize: 16),
+                textAlign: TextAlign.center,
+                decoration: InputDecoration(
+                  hintText: 'Введите чит-код...',
+                  hintStyle: TextStyle(color: Colors.green.withOpacity(0.3)),
+                  filled: true,
+                  fillColor: Colors.black,
+                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.green)),
+                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.amber, width: 2)),
+                ),
               ),
             ),
           ),
@@ -2172,6 +2213,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       ),
     );
   }
+
 
   Widget _buildEditorTracksMenu() {
     final List<String> secretTracks = [
@@ -3405,19 +3447,19 @@ class EditorBackgroundPainter extends CustomPainter {
       canvas.drawLine(Offset(0, y), Offset(size.width / scale, y), paint);
     }
 
-    // 3. ОТРИСОВКА ВСЕХ ПОСТРОЕК НА СЕТКЕ В РЕАЛЬНОМ ВРЕМЕНИ
+        // 3. ОТРИСОВКА ВСЕХ ПОСТРОЕК НА СЕТКЕ В РЕАЛЬНОМ ВРЕМЕНИ
     if (currentLevelData != null) {
       for (var obs in currentLevelData!.obstacles) {
         double renderX = obs.x - cameraX;
         if (renderX > -200 && renderX < (size.width / scale) + 200) {
           if (obs.type == 'platform') {
             paint.style = PaintingStyle.fill;
-            paint.color = const Color(0xFF475569);
+            paint.color = const Color(0xFF334155);
             canvas.drawRect(Rect.fromLTWH(renderX, obs.y, obs.w > 0 ? obs.w : 30, obs.h > 0 ? obs.h : 30), paint);
             
             paint.style = PaintingStyle.stroke;
-            paint.color = const Color(0xFF00F2FE); 
-            paint.strokeWidth = 1.5;
+            paint.color = const Color(0xFF475569); 
+            paint.strokeWidth = 3;
             canvas.drawRect(Rect.fromLTWH(renderX, obs.y, obs.w > 0 ? obs.w : 30, obs.h > 0 ? obs.h : 30), paint);
           } 
           else if (obs.type == 'spike') {
@@ -3431,36 +3473,72 @@ class EditorBackgroundPainter extends CustomPainter {
             canvas.drawPath(spikePath, paint);
 
             paint.style = PaintingStyle.stroke;
-            paint.color = const Color(0xFFEF4444); 
-            paint.strokeWidth = 1.5;
+            paint.color = const Color(0xFFF1F5F9); 
+            paint.strokeWidth = 2.5;
             canvas.drawPath(spikePath, paint);
           }
+          // ИСПРАВЛЕНИЕ: Красивые неоновые овалы порталов с градиентной заливкой!
           else if (obs.type == 'portal_ship' || obs.type == 'portal_grav') {
             paint.style = PaintingStyle.fill;
-            paint.color = obs.type == 'portal_ship' ? const Color(0xA1A855F7) : const Color(0xA1FACC15);
-            canvas.drawOval(Rect.fromLTWH(renderX, obs.y, 30, 90), paint);
+            paint.color = obs.type == 'portal_ship' ? const Color(0x66A855F7) : const Color(0x59EAB308);
+            canvas.drawRect(Rect.fromLTWH(renderX - 10, 100, 20, floorY - 100), paint);
+
+            paint.style = PaintingStyle.stroke;
+            paint.color = obs.type == 'portal_ship' ? const Color(0xFFC084FC) : const Color(0xFFFACC15);
+            paint.strokeWidth = 5;
+            canvas.drawLine(Offset(renderX, 100), Offset(renderX, floorY), paint);
           }
         }
       }
 
+      // ИСПРАВЛЕНИЕ: Красивые вращающиеся сферы орбов с неоновым ядром и белым квадратом!
       for (var orb in currentLevelData!.orbs) {
         double renderX = orb.x - cameraX;
         if (renderX > -50 && renderX < (size.width / scale) + 50) {
+          canvas.save();
+          canvas.translate(renderX, orb.y);
+          
           paint.style = PaintingStyle.fill;
+          paint.color = const Color(0xFF00F2FE).withOpacity(0.3);
+          canvas.drawCircle(Offset.zero, 18, paint);
+
           paint.color = const Color(0xFF00F2FE);
-          canvas.drawCircle(Offset(renderX, orb.y), 12, paint);
+          canvas.drawCircle(Offset.zero, 12, paint);
+
+          paint.style = PaintingStyle.stroke;
+          paint.color = Colors.white;
+          paint.strokeWidth = 1.5;
+          canvas.drawRect(Rect.fromCenter(center: Offset.zero, width: 12, height: 12), paint);
+          canvas.restore();
         }
       }
 
+      // ИСПРАВЛЕНИЕ: Золотые медали с белым внутренним ромбом-кристаллом!
       for (var m in currentLevelData!.medals) {
         double renderX = m.x - cameraX;
         if (renderX > -50 && renderX < (size.width / scale) + 50) {
           paint.style = PaintingStyle.fill;
           paint.color = const Color(0xFFF59E0B);
-          canvas.drawCircle(Offset(renderX, m.y), 14, paint);
+          canvas.drawCircle(Offset(renderX, m.y), 16, paint);
+
+          paint.style = PaintingStyle.stroke;
+          paint.color = Colors.white;
+          paint.strokeWidth = 2.5;
+          canvas.drawCircle(Offset(renderX, m.y), 16, paint);
+          
+          paint.style = PaintingStyle.fill;
+          paint.color = Colors.white;
+          Path coinSymbol = Path()
+            ..moveTo(renderX, m.y - 6)
+            ..lineTo(renderX + 6, m.y)
+            ..lineTo(renderX, m.y + 6)
+            ..lineTo(renderX - 6, m.y)
+            ..close();
+          canvas.drawPath(coinSymbol, paint);
         }
       }
     }
+
 
     // 4. Фиксированная линия пола
     double maxFloorW = (levelLength - cameraX).clamp(0, size.width / scale);
