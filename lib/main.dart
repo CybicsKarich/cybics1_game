@@ -3054,14 +3054,16 @@ class GamePainter extends CustomPainter {
       paint.style = PaintingStyle.fill;
     }
 
-        // 4. Препятствия кастомных и обычных уровней (Отрисовка в прохождении)
+            // 4. Препятствия кастомных и обычных уровней (Отрисовка в прохождении)
     for (var obs in obstacles) {
       double renderX = obs.x - cameraX;
       if (renderX > -200 && renderX < (size.width / scale) + 200) {
-                // --- ИСПРАВЛЕННАЯ ОФИЦИАЛЬНАЯ ОТРИСОВКА ШИПОВ В ИГРЕ ---
+        
+        // ОБЫЧНЫЙ ШИП ИЛИ ШИП С ПОМЕТКОЙ
         if (obs.type == 'spike' || obs.type == 'spike_mark' || obs.type == 'spike_upside') {
-          // Перевёрнутый шип определяется по типу ИЛИ по условиям 4 уровня (инверсия/самолётик)
-          bool isSpikeUpsideDown = (obs.type == 'spike_upside' || obs.y < 200 || (_currentLevel == 4 && _isGravityInverted));
+          // ИСПРАВЛЕНИЕ: Используем currentLevel без подчеркивания. 
+          // Если Y меньше 200 или тип spike_upside — шип автоматически переворачивается!
+          bool isSpikeUpsideDown = (obs.type == 'spike_upside' || obs.y < 200 || (currentLevel == 4 && obs.y < 250));
           
           paint.color = const Color(0xFF0F172A);
           Path spikePath = Path();
@@ -3084,41 +3086,47 @@ class GamePainter extends CustomPainter {
           canvas.drawPath(spikePath, paint);
           paint.style = PaintingStyle.fill;
 
-          // ИСПРАВЛЕНИЕ: Знак [!] возвращен на обычные уровни 1,2,3,4 и кастомные шипы spike_mark!
-          if (_currentLevel <= 4 || obs.type == 'spike_mark') {
+          // ИСПРАВЛЕНИЕ: Рисуем анимированный знак [!] строго для уровней 1-4 или для spike_mark
+          if (currentLevel <= 4 || obs.type == 'spike_mark') {
             canvas.save();
             double pulse = 1.0 + math.sin(player.x * 0.05) * 0.15;
-            // Знак [!] для обычного шипа парит СВЕРХУ (-45), для перевёрнутого — СНИЗУ (+45)
             double markOffsetY = isSpikeUpsideDown ? 45 : -45;
             
             canvas.translate(renderX + 15, obs.y + markOffsetY);
             canvas.scale(pulse, pulse);
             
-            paint.color = const Color(0xFFFACC15); // Насыщенно-жёлтый цвет знака [!]
+            paint.color = isSpikeUpsideDown ? const Color(0xFFEF4444) : const Color(0xFFFACC15);
             canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(-2, -9, 4, 11), const Radius.circular(1.5)), paint);
             canvas.drawCircle(const Offset(0, 5), 2, paint);
             canvas.restore();
           }
-        }
+        } 
         // ТВЕРДАЯ ПЛАТФОРМА
         else if (obs.type == 'platform') {
-          paint.color = const Color(0xFF334155); canvas.drawRect(Rect.fromLTWH(renderX, obs.y, obs.w, obs.h > 0 ? obs.h : 30), paint);
-          paint.style = PaintingStyle.stroke; paint.color = const Color(0xFF475569); paint.strokeWidth = 3; canvas.drawRect(Rect.fromLTWH(renderX, obs.y, obs.w, obs.h > 0 ? obs.h : 30), paint); paint.style = PaintingStyle.fill;
+          paint.color = const Color(0xFF334155); 
+          canvas.drawRect(Rect.fromLTWH(renderX, obs.y, obs.w, obs.h > 0 ? obs.h : 30), paint);
+          
+          paint.style = PaintingStyle.stroke; 
+          paint.color = const Color(0xFF475569); 
+          paint.strokeWidth = 3; 
+          canvas.drawRect(Rect.fromLTWH(renderX, obs.y, obs.w, obs.h > 0 ? obs.h : 30), paint); 
+          paint.style = PaintingStyle.fill;
         }
-                  // ИСПРАВЛЕНИЕ: Порталы в редакторе стали оригинального размера 40x120 пикселей!
-          else if (obs.type == 'portal_ship' || obs.type == 'portal_grav') {
-            paint.style = PaintingStyle.fill;
-            paint.color = obs.type == 'portal_ship' ? const Color(0x66A855F7) : const Color(0x59EAB308);
-            canvas.drawRect(Rect.fromLTWH(renderX, renderY, 40, 120), paint);
-
-            paint.style = PaintingStyle.stroke;
-            paint.color = obs.type == 'portal_ship' ? const Color(0xFFC084FC) : const Color(0xFFFACC15);
-            paint.strokeWidth = 5;
-            canvas.drawLine(Offset(renderX + 20, renderY), Offset(renderX + 20, renderY + 120), paint);
-            paint.style = PaintingStyle.fill;
-          }
+        // ИСПРАВЛЕНИЕ: Порталы в прохождении привязаны строго к obs.y (а не к renderY!)
+        else if (obs.type == 'portal_ship' || obs.type == 'portal_grav') {
+          paint.style = PaintingStyle.fill;
+          paint.color = obs.type == 'portal_ship' ? const Color(0x66A855F7) : const Color(0x59EAB308);
+          canvas.drawRect(Rect.fromLTWH(renderX, obs.y, obs.w > 0 ? obs.w : 40, obs.h > 0 ? obs.h : 120), paint);
+          
+          paint.style = PaintingStyle.stroke;
+          paint.color = obs.type == 'portal_ship' ? const Color(0xFFC084FC) : const Color(0xFFFACC15);
+          paint.strokeWidth = 5;
+          canvas.drawLine(Offset(renderX + 20, obs.y), Offset(renderX + 20, obs.y + (obs.h > 0 ? obs.h : 120)), paint);
+          paint.style = PaintingStyle.fill;
+        }
       }
     }
+
 
     // 5. Медали
     for (var m in medals) {
