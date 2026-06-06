@@ -975,11 +975,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         // --- ЭТАП 3: РАСЧЕТ КОЛЛИЗИЙ И ДИНАМИЧЕСКИЙ ПРОГРЕСС ---
     _currentProgress = (progressPct.clamp(0, 100)).floor();
 
-    // ИСПРАВЛЕНИЕ: Шкала прохождения кастомного уровня теперь обновляется КАЖДЫЙ КАДР на ходу
     if (_currentLevel == 5 && _currentEditingLevel != null) {
       if (_currentProgress > _currentEditingLevel!.progress) {
         _currentEditingLevel!.progress = _currentProgress;
-        // Записываем в кэш без тормозов интерфейса
         String encoded = jsonEncode(_myCreatedLevels.map((e) => e.toJson()).toList());
         _prefs.setString('cybics_custom_levels', encoded);
       }
@@ -997,45 +995,57 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       }
     }
 
-        // ======================================================================
-    // ИСПРАВЛЕННЫЙ ЦИКЛ А: ОБРАБОТКА ШИПОВ (ОБЫЧНЫЕ, С [!] И ПЕРЕВЁРНУТЫЕ)
-    // ======================================================================
+    // ИСПРАВЛЕНИЕ: Коллизии сфер (орбов) теперь работают на кастомном 5 уровне!
+    if (_isPressing && !_player.isGrounded) {
+      final double playerCenterX = _player.x + _player.size / 2;
+      final double playerCenterY = _player.y + _player.size / 2;
+      for (var orb in _orbs) {
+        if (orb.collected) continue;
+        if (orb.x < _player.x - 60 || orb.x > _player.x + 150) continue;
+
+        double distX = (playerCenterX - orb.x).abs();
+        double distY = (playerCenterY - orb.y).abs();
+        
+        if (distX < 70 && distY < 70) {
+          orb.collected = true;
+          // Даем импульс в зависимости от инверсии
+          _player.vy = _isGravityInverted ? 14.5 : -14.5;
+          _player.isGrounded = false;
+          _isPressing = false; // Сбрасываем нажатие после активации сферы
+          break;
+        }
+      }
+    }
+
+    // ИСПРАВЛЕНИЕ: Физика шипов (Возвращены оригинальные размеры и честная смерть)
     for (var obs in _obstacles) {
-      // ИСПРАВЛЕНИЕ: Движок теперь проверяет все 3 типа шипов!
-      if (obs.type != 'spike' && obs.type != 'spike_mark' && obs.type != 'spike_upside') continue; 
+      if (obs.type != 'spike' && obs.type != 'spike_mark' && obs.type != 'spike_upside') continue;
       if (obs.x < _player.x - 50 || obs.x > _player.x + 800) continue;
 
-      // Перевёрнутый шип определяется по типу, а не только по высоте
-      bool isSpikeUpsideDown = (obs.type == 'spike_upside');
+      bool isSpikeUpsideDown = (obs.type == 'spike_upside' || (_currentLevel == 4 && _isGravityInverted && obs.y < 200));
       
-      // Сбалансированный и честный хитбокс шипа
-      if (_player.x + _player.size > obs.x + 6 && _player.x < obs.x + 24) {
+      // Оригинальный размер хитбокса Geometry Dash
+      if (_player.x + _player.size > obs.x + 8 && _player.x < obs.x + 22) {
         if (!isSpikeUpsideDown) {
-          // Обычный шип или шип с [!] на полу
-          if (_player.y + _player.size > obs.y - 35 && _player.y < obs.y) {
+          if (_player.y + _player.size > obs.y - 30 && _player.y < obs.y) {
             if (!_isGodMode) { _gameOver(); return; }
           }
         } else {
-          // Перевёрнутый шип под потолком
-          if (_player.y < obs.y + 35 && _player.y + _player.size > obs.y) {
+          if (_player.y < obs.y + 30 && _player.y + _player.size > obs.y) {
             if (!_isGodMode) { _gameOver(); return; }
           }
         }
       }
     }
 
-
-        // ======================================================================
-    // ИСПРАВЛЕННЫЙ ЦИКЛ Б: ОБРАБОТКА ПЛАТФОРМ И ПОРТАЛОВ (С ПРАВИЛЬНОЙ СМЕРТЬЮ)
-    // ======================================================================
+    // ИСПРАВЛЕНИЕ: Железобетонная физика платформ (Считывает реальную высоту obs.h кастомного уровня)
     for (var obs in _obstacles) {
-      // Движок обрабатывает и платформы, и порталы кастомных уровней
       if (obs.type != 'platform' && obs.type != 'portal_ship' && obs.type != 'portal_grav') continue;
-      
       double width = obs.w > 0 ? obs.w : 30.0;
+      double height = obs.h > 0 ? obs.h : 30.0; // Считываем высоту блока динамически!
       if (obs.x + width < _player.x - 100 || obs.x > _player.x + 800) continue;
 
-      // Триггер портала самолётика
+      // Портал Самолётика (Размер 40x120 как в оригинале)
       if (obs.type == 'portal_ship') {
         if (_player.x + _player.size > obs.x && _player.x < obs.x + 40) {
           if (_player.y + _player.size > obs.y && _player.y < obs.y + 120) {
@@ -1045,7 +1055,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         continue; 
       }
 
-      // Триггер портала инверсии гравитации
+      // Портал Инверсии
       if (obs.type == 'portal_grav') {
         if (_player.x + _player.size > obs.x && _player.x < obs.x + 40) {
           if (_player.y + _player.size > obs.y && _player.y < obs.y + 120) {
@@ -1057,16 +1067,18 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
       bool stoodOnPlatform = false;
 
-      // Честное приземление НА платформу (сверху или снизу в инверсии)
+      // Приземление/Прилипание к платформе
       if (_player.x + _player.size > obs.x + 4 && _player.x < obs.x + width - 4) {
         if (_isGravityInverted) {
-          if (_player.vy <= 0 && _player.y <= obs.y + 30 && _player.y >= obs.y + 5) {
-            _player.y = obs.y + 30;
+          // Инверсия: цепляемся за нижнюю грань платформы (obs.y + height)
+          if (_player.vy <= 0 && _player.y <= obs.y + height && _player.y >= obs.y + height - 25) {
+            _player.y = obs.y + height;
             _player.vy = 0;
             _player.isGrounded = true;
             stoodOnPlatform = true;
           }
         } else {
+          // Обычный режим: приземляемся сверху на блок
           if (_player.vy >= 0 && _player.y + _player.size >= obs.y && _player.y + _player.size <= obs.y + 25) {
             _player.y = obs.y - _player.size;
             _player.vy = 0;
@@ -1078,19 +1090,16 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
       if (stoodOnPlatform) continue;
 
-      // ИСПРАВЛЕНИЕ БАГА: Жёсткий удар в торец (бок) платформы — МГНОВЕННЫЙ ПЕРЕЗАПУСК УРОВНЯ!
+      // Жесткий удар в торец (бок) платформы — МГНОВЕННАЯ СМЕРТЬ И ОТКАТ ПРОВАЛИВАНИЙ!
       if (!_isGodMode) {
         if (_player.x + _player.size > obs.x && _player.x < obs.x + width) {
-          // Проверяем, что куб врезался именно в боковую грань по высоте
-          if (_player.y + _player.size > obs.y + 4 && _player.y < obs.y + 26) {
-            _gameOver(); // Кубик гарантированно взрывается, вызывая нормальный рестарт раунда!
-            return; // Мгновенно выходим из физического цикла, чтобы зафиксировать смерть
+          if (_player.y + _player.size > obs.y + 6 && _player.y < obs.y + height - 6) {
+            _gameOver();
+            return;
           }
         }
       }
     }
-
-
 
 
     // Вращение куба в воздухе...
@@ -3049,44 +3058,65 @@ class GamePainter extends CustomPainter {
     for (var obs in obstacles) {
       double renderX = obs.x - cameraX;
       if (renderX > -200 && renderX < (size.width / scale) + 200) {
-        // ОБЫЧНЫЙ ШИП
-        if (obs.type == 'spike') {
+                // --- ИСПРАВЛЕННАЯ ОФИЦИАЛЬНАЯ ОТРИСОВКА ШИПОВ В ИГРЕ ---
+        if (obs.type == 'spike' || obs.type == 'spike_mark' || obs.type == 'spike_upside') {
+          // Перевёрнутый шип определяется по типу ИЛИ по условиям 4 уровня (инверсия/самолётик)
+          bool isSpikeUpsideDown = (obs.type == 'spike_upside' || obs.y < 200 || (_currentLevel == 4 && _isGravityInverted));
+          
           paint.color = const Color(0xFF0F172A);
-          Path spikePath = Path()..moveTo(renderX, obs.y)..lineTo(renderX + 30, obs.y)..lineTo(renderX + 15, obs.y - 30)..close();
+          Path spikePath = Path();
+          
+          if (isSpikeUpsideDown) {
+            spikePath.moveTo(renderX, obs.y);
+            spikePath.lineTo(renderX + 30, obs.y);
+            spikePath.lineTo(renderX + 15, obs.y + 30); // Острие вниз
+          } else {
+            spikePath.moveTo(renderX, obs.y);
+            spikePath.lineTo(renderX + 30, obs.y);
+            spikePath.lineTo(renderX + 15, obs.y - 30); // Острие вверх
+          }
+          spikePath.close();
           canvas.drawPath(spikePath, paint);
-          paint.style = PaintingStyle.stroke; paint.color = const Color(0xFFF1F5F9); paint.strokeWidth = 2.5; canvas.drawPath(spikePath, paint); paint.style = PaintingStyle.fill;
-        } 
-        // ШИП С ВОСКЛИЦАТЕЛЬНЫМ ЗНАКОМ [!]
-        else if (obs.type == 'spike_mark') {
-          paint.color = const Color(0xFF0F172A);
-          Path spikePath = Path()..moveTo(renderX, obs.y)..lineTo(renderX + 30, obs.y)..lineTo(renderX + 15, obs.y - 30)..close();
+
+          paint.style = PaintingStyle.stroke;
+          paint.color = const Color(0xFFF1F5F9); 
+          paint.strokeWidth = 2.5;
           canvas.drawPath(spikePath, paint);
-          paint.style = PaintingStyle.stroke; paint.color = const Color(0xFFFACC15); paint.strokeWidth = 2.5; canvas.drawPath(spikePath, paint); paint.style = PaintingStyle.fill;
-          paint.color = const Color(0xFFEA580C); canvas.drawRect(Rect.fromLTWH(renderX + 13, obs.y - 22, 4, 8), paint); canvas.drawCircle(Offset(renderX + 15, obs.y - 8), 2, paint);
-        }
-        // ПЕРЕВЕРНУТЫЙ ШИП НА ПОТОЛКЕ
-        else if (obs.type == 'spike_upside') {
-          paint.color = const Color(0xFF0F172A);
-          Path spikePath = Path()..moveTo(renderX, obs.y)..lineTo(renderX + 30, obs.y)..lineTo(renderX + 15, obs.y + 30)..close();
-          canvas.drawPath(spikePath, paint);
-          paint.style = PaintingStyle.stroke; paint.color = const Color(0xFFEF4444); paint.strokeWidth = 2.5; canvas.drawPath(spikePath, paint); paint.style = PaintingStyle.fill;
+          paint.style = PaintingStyle.fill;
+
+          // ИСПРАВЛЕНИЕ: Знак [!] возвращен на обычные уровни 1,2,3,4 и кастомные шипы spike_mark!
+          if (_currentLevel <= 4 || obs.type == 'spike_mark') {
+            canvas.save();
+            double pulse = 1.0 + math.sin(player.x * 0.05) * 0.15;
+            // Знак [!] для обычного шипа парит СВЕРХУ (-45), для перевёрнутого — СНИЗУ (+45)
+            double markOffsetY = isSpikeUpsideDown ? 45 : -45;
+            
+            canvas.translate(renderX + 15, obs.y + markOffsetY);
+            canvas.scale(pulse, pulse);
+            
+            paint.color = const Color(0xFFFACC15); // Насыщенно-жёлтый цвет знака [!]
+            canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(-2, -9, 4, 11), const Radius.circular(1.5)), paint);
+            canvas.drawCircle(const Offset(0, 5), 2, paint);
+            canvas.restore();
+          }
         }
         // ТВЕРДАЯ ПЛАТФОРМА
         else if (obs.type == 'platform') {
           paint.color = const Color(0xFF334155); canvas.drawRect(Rect.fromLTWH(renderX, obs.y, obs.w, obs.h > 0 ? obs.h : 30), paint);
           paint.style = PaintingStyle.stroke; paint.color = const Color(0xFF475569); paint.strokeWidth = 3; canvas.drawRect(Rect.fromLTWH(renderX, obs.y, obs.w, obs.h > 0 ? obs.h : 30), paint); paint.style = PaintingStyle.fill;
         }
-        // ПОРТАЛЫ (КАСТОМНЫЙ РЕЖИМ)
-        else if (obs.type == 'portal_ship' || obs.type == 'portal_grav') {
-          paint.style = PaintingStyle.fill;
-          paint.color = obs.type == 'portal_ship' ? const Color(0x66A855F7) : const Color(0x59EAB308);
-          canvas.drawRect(Rect.fromLTWH(renderX, obs.y, obs.w > 0 ? obs.w : 40, obs.h > 0 ? obs.h : 120), paint);
-          paint.style = PaintingStyle.stroke;
-          paint.color = obs.type == 'portal_ship' ? const Color(0xFFC084FC) : const Color(0xFFFACC15);
-          paint.strokeWidth = 5;
-          canvas.drawLine(Offset(renderX + 20, obs.y), Offset(renderX + 20, obs.y + (obs.h > 0 ? obs.h : 120)), paint);
-          paint.style = PaintingStyle.fill;
-        }
+                  // ИСПРАВЛЕНИЕ: Порталы в редакторе стали оригинального размера 40x120 пикселей!
+          else if (obs.type == 'portal_ship' || obs.type == 'portal_grav') {
+            paint.style = PaintingStyle.fill;
+            paint.color = obs.type == 'portal_ship' ? const Color(0x66A855F7) : const Color(0x59EAB308);
+            canvas.drawRect(Rect.fromLTWH(renderX, renderY, 40, 120), paint);
+
+            paint.style = PaintingStyle.stroke;
+            paint.color = obs.type == 'portal_ship' ? const Color(0xFFC084FC) : const Color(0xFFFACC15);
+            paint.strokeWidth = 5;
+            canvas.drawLine(Offset(renderX + 20, renderY), Offset(renderX + 20, renderY + 120), paint);
+            paint.style = PaintingStyle.fill;
+          }
       }
     }
 
