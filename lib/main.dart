@@ -867,8 +867,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     _player.x += 7.5;
     _cameraX = _player.x - 200;
 
-    double progressPct = (_player.x / _levelLength) * 100;
-    _player.isShip = (progressPct >= 40 && progressPct <= 75 && (_currentLevel == 2 || _currentLevel == 3));
+        double progressPct = (_player.x / _levelLength) * 100;
+    // ИСПРАВЛЕНИЕ: Автоматический сброс по % работает ТОЛЬКО на стандартных уровнях. 
+    // На 5-м кастомном уровне режим переключается исключительно порталами!
+    if (_currentLevel != 5) {
+      _player.isShip = (progressPct >= 40 && progressPct <= 75 && (_currentLevel == 2 || _currentLevel == 3));
+    }
+
 
     _trailParticles.add(Offset(_player.x, _player.y + _player.size / 2));
     if (_trailParticles.length > 15) _trailParticles.removeAt(0);
@@ -880,8 +885,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       _frameCount = 0;
     }
 
-    // --- ЭТАП 1: ОБРАБОТКА ВВОДА ---
-    if (_currentLevel == 4) {
+        if (_currentLevel == 4) {
       _player.isShip = false;
       _isGravityInverted = (progressPct >= 35 && progressPct <= 70);
       
@@ -889,11 +893,17 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       bool isAutoFlying = _isGravityInverted && (_player.x < portalInX + 600);
 
       if (_isPressing && _player.isGrounded && !isAutoFlying) {
-        // ИСПРАВЛЕНИЕ: Прыжок вниз от потолка в инверсии должен быть равен 17.0 (положительный!)
+        _player.vy = _isGravityInverted ? 17.0 : _player.jumpForce;
+        _player.isGrounded = false;
+      }
+    } else if (_currentLevel == 5) {
+      // ИСПРАВЛЕНИЕ ДЛЯ КАСТУМНЫХ КАРТ: Физика прыжка подстраивается под текущий режим гравитации портала
+      if (_isPressing && _player.isGrounded) {
         _player.vy = _isGravityInverted ? 17.0 : _player.jumpForce;
         _player.isGrounded = false;
       }
     } else {
+      // Обычные уровни 1, 2, 3
       if (!_player.isShip && _isPressing && _player.isGrounded) {
         _player.vy = _player.jumpForce;
         _player.isGrounded = false;
@@ -1057,21 +1067,28 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       double height = obs.h > 0 ? obs.h : 30.0; // Считываем высоту блока динамически!
       if (obs.x + width < _player.x - 100 || obs.x > _player.x + 800) continue;
 
-      // Портал Самолётика (Размер 40x120 как в оригинале)
+            // ИСПРАВЛЕНИЕ: Портал Самолётика работает на всю высоту 400px и инвертирует режим при повторном входе
       if (obs.type == 'portal_ship') {
         if (_player.x + _player.size > obs.x && _player.x < obs.x + 40) {
-          if (_player.y + _player.size > obs.y && _player.y < obs.y + 120) {
-            _player.isShip = true;
+          if (_player.y + _player.size > obs.y && _player.y < obs.y + 400) {
+            // Чтобы режим не мигал каждый кадр, пока куб внутри портала, переключаем только при входе
+            if (_player.x >= obs.x && _player.x <= obs.x + 8) {
+              _player.isShip = !_player.isShip; // Первый портал включит самолёт, второй — выключит!
+              _player.vy = 0;
+            }
           }
         }
         continue; 
       }
 
-      // Портал Инверсии
+      // ИСПРАВЛЕНИЕ: Портал Гравитации работает на всю высоту 400px и переворачивает куб
       if (obs.type == 'portal_grav') {
         if (_player.x + _player.size > obs.x && _player.x < obs.x + 40) {
-          if (_player.y + _player.size > obs.y && _player.y < obs.y + 120) {
-            _isGravityInverted = true;
+          if (_player.y + _player.size > obs.y && _player.y < obs.y + 400) {
+            if (_player.x >= obs.x && _player.x <= obs.x + 8) {
+              _isGravityInverted = !_isGravityInverted; // Первый портал перевернет на потолок, второй — вернет на пол!
+              _player.vy = 0;
+            }
           }
         }
         continue;
@@ -2039,11 +2056,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                     _currentEditingLevel!.orbs.add(GameOrb(x: worldX + 15, y: worldY + 15));
                   } 
                   else if (_editorSelectedTool == 'portal_ship') {
-                    _currentEditingLevel!.obstacles.add(Obstacle(type: 'portal_ship', x: worldX, y: worldY, w: 40, h: 120));
+                    // ИСПРАВЛЕНИЕ: Портал теперь стоит от Y=100 до пола и имеет высоту 400px
+                    _currentEditingLevel!.obstacles.add(Obstacle(type: 'portal_ship', x: worldX, y: 100, w: 40, h: 400));
                   } 
                   else if (_editorSelectedTool == 'portal_grav') {
-                    _currentEditingLevel!.obstacles.add(Obstacle(type: 'portal_grav', x: worldX, y: worldY, w: 40, h: 120));
-                  } 
+                    // ИСПРАВЛЕНИЕ: Портал инверсии тоже вытянут на 400px
+                    _currentEditingLevel!.obstacles.add(Obstacle(type: 'portal_grav', x: worldX, y: 100, w: 40, h: 400));
+                  }  
                   else if (_editorSelectedTool == 'medal') {
                     if (_currentEditingLevel!.medals.length < 3) {
                       int nextId = _currentEditingLevel!.medals.length;
@@ -3138,15 +3157,16 @@ class GamePainter extends CustomPainter {
           paint.style = PaintingStyle.fill;
         }
         // ИСПРАВЛЕНИЕ: Порталы в прохождении привязаны строго к obs.y (а не к renderY!)
-        else if (obs.type == 'portal_ship' || obs.type == 'portal_grav') {
+                else if (obs.type == 'portal_ship' || obs.type == 'portal_grav') {
           paint.style = PaintingStyle.fill;
           paint.color = obs.type == 'portal_ship' ? const Color(0x66A855F7) : const Color(0x59EAB308);
-          canvas.drawRect(Rect.fromLTWH(renderX, obs.y, obs.w > 0 ? obs.w : 40, obs.h > 0 ? obs.h : 120), paint);
+          // Рисуем фоновый неоновый луч высотой 400 пикселей
+          canvas.drawRect(Rect.fromLTWH(renderX, obs.y, 40, 400), paint);
           
           paint.style = PaintingStyle.stroke;
           paint.color = obs.type == 'portal_ship' ? const Color(0xFFC084FC) : const Color(0xFFFACC15);
           paint.strokeWidth = 5;
-          canvas.drawLine(Offset(renderX + 20, obs.y), Offset(renderX + 20, obs.y + (obs.h > 0 ? obs.h : 120)), paint);
+          canvas.drawLine(Offset(renderX + 20, obs.y), Offset(renderX + 20, obs.y + 400), paint);
           paint.style = PaintingStyle.fill;
         }
       }
@@ -3672,11 +3692,17 @@ class EditorBackgroundPainter extends CustomPainter {
             canvas.drawPath(spikePath, paint);
             paint.style = PaintingStyle.stroke; paint.color = const Color(0xFFEF4444); paint.strokeWidth = 2.5; canvas.drawPath(spikePath, paint);
           }
-          else if (obs.type == 'portal_ship' || obs.type == 'portal_grav') {
-            paint.style = PaintingStyle.fill; paint.color = obs.type == 'portal_ship' ? const Color(0x66A855F7) : const Color(0x59EAB308);
-            canvas.drawRect(Rect.fromLTWH(renderX, renderY, obs.w > 0 ? obs.w : 40, obs.h > 0 ? obs.h : 120), paint);
-            paint.style = PaintingStyle.stroke; paint.color = obs.type == 'portal_ship' ? const Color(0xFFC084FC) : const Color(0xFFFACC15); paint.strokeWidth = 5;
-            canvas.drawLine(Offset(renderX + 20, renderY), Offset(renderX + 20, renderY + (obs.h > 0 ? obs.h : 120)), paint);
+                    else if (obs.type == 'portal_ship' || obs.type == 'portal_grav') {
+            paint.style = PaintingStyle.fill;
+            paint.color = obs.type == 'portal_ship' ? const Color(0x66A855F7) : const Color(0x59EAB308);
+            // В редакторе тоже вытягиваем на 400px с учетом вертикального скролла renderY
+            canvas.drawRect(Rect.fromLTWH(renderX, renderY, 40, 400), paint);
+
+            paint.style = PaintingStyle.stroke;
+            paint.color = obs.type == 'portal_ship' ? const Color(0xFFC084FC) : const Color(0xFFFACC15);
+            paint.strokeWidth = 5;
+            canvas.drawLine(Offset(renderX + 20, renderY), Offset(renderX + 20, renderY + 400), paint);
+            paint.style = PaintingStyle.fill;
           }
         }
       }
