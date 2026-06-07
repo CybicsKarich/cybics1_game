@@ -942,10 +942,24 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           _player.isGrounded = true;
         }
       } 
-      else if (_isGravityInverted) {
+            else if (_isGravityInverted) {
         _player.vy -= 1.3;
         if (_player.vy < -14) _player.vy = -14;
         _player.y += _player.vy;
+
+        // ======================================================================
+        // ИСПРАВЛЕНИЕ: ТАЙМЕР НА 3 СЕКУНДЫ В НЕБЕ ТЕПЕРЬ ДЕЙСТВУЕТ И НА 4 УРОВНЕ!
+        // ======================================================================
+        if (_player.y < 0) {
+          _spaceTimeCounter++;
+          if (_spaceTimeCounter > 180 && !_isGodMode) { // 180 кадров при 60 FPS = 3 секунды
+            _spaceTimeCounter = 0;
+            _gameOver(); // Гарантированная смерть от улета в открытый космос
+            return;
+          }
+        } else {
+          _spaceTimeCounter = 0; // Сбрасываем счетчик, если кубик вернулся в коридор видимости
+        }
 
         if (progressPct >= 64.0 && progressPct <= 69.0) {
           if (_player.y >= 350) {
@@ -953,12 +967,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             _player.vy = 0;
           }
         } else {
+          // Защита от падения под текстуры потолка на 4 уровне
           if (_player.y <= 5 && !wasGrounded && !_isGodMode && _player.vy < 0) { 
             _gameOver(); 
             return; 
           }
         } 
-      } 
+      }  
       else {
         _player.vy += _player.gravity;
         if (_player.vy > 15) _player.vy = 15;
@@ -1003,34 +1018,35 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         if (_player.y <= 60) { _player.y = 60; _player.vy = 0; }
         if (_player.y >= _floorY - _player.size) { _player.y = _floorY - _player.size; _player.vy = 0; }
       } 
-      else {
+            else {
         // 2. Физика кубика на кастомной карте
         if (_isGravityInverted) {
           _player.vy -= 1.3; // Гравитация тянет вверх к потолку
           if (_player.vy < -14) _player.vy = -14;
           _player.y += _player.vy;
 
-          // Проверка таймера космоса для инвертированного кубика (если летит в секретке выше экрана)
+          // ИСПРАВЛЕНИЕ: Полноценный 3-секундный таймер смерти в небе для инвертированного кубика
           if (_player.y < 0) {
             _spaceTimeCounter++;
-            if (_spaceTimeCounter > 180 && !_isGodMode) {
+            if (_spaceTimeCounter > 180 && !_isGodMode) { // 180 кадров = 3 секунды
               _spaceTimeCounter = 0;
-              _gameOver();
+              _gameOver(); // Улетает в небо и гарантированно умирает!
               return;
             }
           } else {
-            _spaceTimeCounter = 0; // Сброс при нахождении в коридоре
+            // Сбрасываем счетчик, если кубик находится в видимой зоне между небом и потолком
+            if (_player.y > 10) _spaceTimeCounter = 0; 
           }
 
-          // Приземление на потолок (высота Y = 100)
+          // Приземление на потолок (высота Y = 100 — верхняя граница коридора)
           if (_player.y <= 100) {
             _player.y = 100;
             _player.vy = 0;
             _player.isGrounded = true;
-            _spaceTimeCounter = 0; // Сброс, так как кубик встал твердо на платформу потолка
+            _spaceTimeCounter = 0; // Сброс таймера, кубик твердо стоит на потолке
           }
         } else {
-          // Обычный режим кубика
+          // Обычный режим кубика на полу
           _player.vy += _player.gravity;
           if (_player.vy > 15) _player.vy = 15;
           _player.y += _player.vy;
