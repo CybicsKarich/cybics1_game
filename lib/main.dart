@@ -995,24 +995,36 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       }
     }
 
-    // ИСПРАВЛЕНИЕ: Коллизии сфер (орбов) теперь работают на кастомном 5 уровне!
+        // ======================================================================
+    // ИСПРАВЛЕНИЕ ОШИБКИ №2: ЧЕСТНЫЕ ХИТБОКСЫ СФЕР И ЗАЩИТА ОТ ДВОЙНОГО КЛИКА
+    // ======================================================================
     if (_isPressing && !_player.isGrounded) {
       final double playerCenterX = _player.x + _player.size / 2;
       final double playerCenterY = _player.y + _player.size / 2;
+      
       for (var orb in _orbs) {
         if (orb.collected) continue;
-        if (orb.x < _player.x - 60 || orb.x > _player.x + 150) continue;
+        // Ограничиваем зону проверки по X для оптимизации
+        if (orb.x < _player.x - 50 || orb.x > _player.x + 100) continue;
 
         double distX = (playerCenterX - orb.x).abs();
         double distY = (playerCenterY - orb.y).abs();
         
-        if (distX < 70 && distY < 70) {
+        // ИСПРАВЛЕНИЕ: Сузили радиус с 70 до 45 пикселей. 
+        // Теперь кубик не активирует верхнюю сферу раньше времени!
+        if (distX < 45 && distY < 45) {
           orb.collected = true;
-          // Даем импульс в зависимости от инверсии
-          _player.vy = _isGravityInverted ? 14.5 : -14.5;
+          
+          // Проверяем инверсию гравитации строго в момент тапа
+          if (_isGravityInverted) {
+            _player.vy = 14.5; // Толкаем вниз, если куб на потолке
+          } else {
+            _player.vy = -14.5; // Толкаем вверх, если куб на полу
+          }
+          
           _player.isGrounded = false;
-          _isPressing = false; // Сбрасываем нажатие после активации сферы
-          break;
+          _isPressing = false; // ИСПРАВЛЕНИЕ: Гарантированно сбрасываем нажатие, блокируя ложный двойной прыжок!
+          break; // Выходим из цикла, обрабатывая строго ОДИН орб за один тап
         }
       }
     }
