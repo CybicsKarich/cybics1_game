@@ -1207,12 +1207,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
 
  
-    void _gameOver() {
+      void _gameOver() {
     _gameTimer?.cancel();
     _retryTimer?.cancel(); 
     _playDeathSound();
     bool isNewRecord = false;
 
+    // 1. Сначала рассчитываем текстовый рекорд % прохождения для плашек
     if (_currentLevel == 1 && _currentProgress > _maxProgress && _currentProgress < 100) {
       _maxProgress = _currentProgress; _prefs.setInt('cybics_max_progress', _maxProgress); isNewRecord = true;
     } else if (_currentLevel == 2 && _currentProgress > _maxProgress2 && _currentProgress < 100) {
@@ -1221,17 +1222,20 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       _maxProgress3 = _currentProgress; _prefs.setInt('cybics_max_progress_3', _maxProgress3); isNewRecord = true;
     } else if (_currentLevel == 4 && _currentProgress > _maxProgress4 && _currentProgress < 100) {
       _maxProgress4 = _currentProgress; _prefs.setInt('cybics_max_progress_4', _maxProgress4); isNewRecord = true;
-    }
- // ИСПРАВЛЕНИЕ: Обновляем и сохраняем прогресс-бар для созданного уровня
+    } else if (_currentLevel == 5 && _currentEditingLevel != null) {
       if (_currentProgress > _currentEditingLevel!.progress) {
         _currentEditingLevel!.progress = _currentProgress;
-        _saveCustomLevelsToPrefs(); // Жесткая запись на диск
+        _saveCustomLevelsToPrefs();
         isNewRecord = true;
       }
-    
-    _collectedThisRun.clear(); // Монеты сгорают при смерти!
+    }
+
+    // 2. ИСПРАВЛЕНИЕ ОШИБКИ №1: Монеты сгорают! Полностью очищаем список раунда.
+    // Больше никаких проверок индексов _savedMedals, которые ломали и замораживали таймер смерти!
+    _collectedThisRun.clear();
 
     if (!mounted) return; 
+    // Дальше идет твой стандартный блок setState(() { _isPlaying = false; ... }) с добавлением частиц взрыва... 
     setState(() {
       _isPlaying = false;
       _trailParticles.clear();
@@ -1277,17 +1281,26 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   }
 
 
-  void _continueGameOverLogic(bool isNewRecord) {
+    void _continueGameOverLogic(bool isNewRecord) {
     if (isNewRecord) {
-      if (!mounted) return; // ИСПРАВЛЕНИЕ
+      if (!mounted) return; 
       setState(() { _showNewRecord = true; });
+      
+      // Задержка 1200мс для рекорда, чтобы рассмотреть плашку
       _retryTimer = Timer(const Duration(milliseconds: 1200), () {
+        if (!mounted) return;
         _registerNewAttempt();
         _startLevel();
       });
     } else {
-      _registerNewAttempt();
-      _startLevel();
+      // ИСПРАВЛЕНИЕ ОШИБКИ №1: Добавлена микро-пауза в 300мс для обычных смертей.
+      // Теперь кубик не телепортируется мгновенно, звук взрыва успевает доиграть,
+      // а переменная _retryTimer контролируется движком и не вызывает скрытых сбоев!
+      _retryTimer = Timer(const Duration(milliseconds: 300), () {
+        if (!mounted) return;
+        _registerNewAttempt();
+        _startLevel();
+      });
     }
   }
 
