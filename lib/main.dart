@@ -644,17 +644,22 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             // Стартовая платформа-потолок
             _obstacles.add(Obstacle(type: 'platform', x: m3X, y: 100, w: 150, h: 40));
             
-            // ИСПРАВЛЕНИЕ: Подняли на Y = -10. Монетка скрыта наполовину, но доступна для сбора!
+            // Монетка скрыта наполовину
             _medals.add(Medal(id: 2, x: m3X + 265, y: -10)); 
 
             // Орб для прыжка обратно в коридор
             _orbs.add(GameOrb(x: m3X + 265, y: 160, collected: false));
-            _obstacles.add(Obstacle(type: 'platform', x: m3X + 380, y: 100, w: 150, h: 40));
+            
+            // ИСПРАВЛЕНИЕ: Отодвинули вторую платформу дальше (X = m3X + 520 вместо +380) 
+            // и уменьшили ширину до 80, чтобы у кубика было огромное безопасное окно 
+            // для падения вниз сквозь портал без удара о торец блока!
+            _obstacles.add(Obstacle(type: 'platform', x: m3X + 520, y: 100, w: 80, h: 40));
             
             nextX += 680; 
             spawnedMedal3Obstacle = true;
             continue;
           }
+
 
 
 
