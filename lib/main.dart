@@ -775,11 +775,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       _trailParticles.clear();
       _collectedThisRun.clear();
       _showVictory = false;
-      _showNewRecord = false;
-
-      // ИСПРАВЛЕНИЕ 1: Обнуляем счетчик 3-секундного таймера космоса
-      _spaceTimeCounter = 0; 
-      
+      _showNewRecord = false; 
+      _spaceTimeCounter = 0;
       _isGravityInverted = false;
       _portalParticles.clear();
 
@@ -925,10 +922,27 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       }
     }
 
-    // --- ЭТАП 2: ФИЗИКА ДВИЖЕНИЯ (ГРАВИТАЦИЯ, ПЛАТФОРМЫ И ТАЙМЕР КОСМОСА) ---
+        // --- ЭТАП 2: ФИЗИКА ДВИЖЕНИЯ (ГРАВИТАЦИЯ, ИНВЕРСИЯ И ОБСЧЁТ ТАЙМЕРА КОСМОСА) ---
     bool wasGrounded = _player.isGrounded;
     _player.isGrounded = false;
 
+    // ГЛОБАЛЬНАЯ ЛОГИКА ТАЙМЕРА КОСМОСА ДЛЯ ВСЕХ РЕЖИМОВ И УРОВНЕЙ (4 и 5)
+    if (_isGravityInverted && _player.y < 0) {
+      _spaceTimeCounter++;
+      
+      // ИСПРАВЛЕНИЕ: Никаких ограничений! Кубик улетает бесконечно далеко вверх
+      if (_spaceTimeCounter > 180 && !_isGodMode) { // 180 кадров движка = 3 секунды
+        _spaceTimeCounter = 0;
+        _gameOver(); 
+        return;
+      }
+    } else {
+      if (_player.y >= 0) {
+        _spaceTimeCounter = 0;
+      }
+    }
+
+    // РАСЧЁТ ДВИЖЕНИЯ ДЛЯ 4-ГО УРОВНЯ
     if (_currentLevel == 4) {
       double portalInX = _levelLength * 0.35;
       bool isAutoFlying = _isGravityInverted && (_player.x < portalInX + 600);
@@ -942,24 +956,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           _player.isGrounded = true;
         }
       } 
-            else if (_isGravityInverted) {
+      else if (_isGravityInverted) {
         _player.vy -= 1.3;
         if (_player.vy < -14) _player.vy = -14;
         _player.y += _player.vy;
-
-        // ======================================================================
-        // ИСПРАВЛЕНИЕ: ТАЙМЕР НА 3 СЕКУНДЫ В НЕБЕ ТЕПЕРЬ ДЕЙСТВУЕТ И НА 4 УРОВНЕ!
-        // ======================================================================
-        if (_player.y < 0) {
-          _spaceTimeCounter++;
-          if (_spaceTimeCounter > 180 && !_isGodMode) { // 180 кадров при 60 FPS = 3 секунды
-            _spaceTimeCounter = 0;
-            _gameOver(); // Гарантированная смерть от улета в открытый космос
-            return;
-          }
-        } else {
-          _spaceTimeCounter = 0; // Сбрасываем счетчик, если кубик вернулся в коридор видимости
-        }
 
         if (progressPct >= 64.0 && progressPct <= 69.0) {
           if (_player.y >= 350) {
@@ -967,13 +967,12 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             _player.vy = 0;
           }
         } else {
-          // Защита от падения под текстуры потолка на 4 уровне
           if (_player.y <= 5 && !wasGrounded && !_isGodMode && _player.vy < 0) { 
             _gameOver(); 
             return; 
           }
         } 
-      }  
+      } 
       else {
         _player.vy += _player.gravity;
         if (_player.vy > 15) _player.vy = 15;
@@ -985,67 +984,31 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         }
       } 
     } 
-    // ======================================================================
-    // КОД КАСТОМНОГО 5-ГО УРОВНЯ С ПОЛНЫМ ОБСЧЁТОМ _spaceTimeCounter В ИНВЕРСИИ
-    // ======================================================================
+    // РАСЧЁТ ДВИЖЕНИЯ ДЛЯ КАСТОМНОГО 5-ГО УРОВНЯ
     else if (_currentLevel == 5) {
       if (_player.isShip) {
-        // 1. Физика самолётика на кастомной карте
         if (_isGravityInverted) {
-          // Инвертированный самолётик: зажали — летит вниз, отпустили — падает вверх
           if (_isPressing) _player.vy += 0.9; else _player.vy -= 0.7;
-          
-          // Проверка таймера космоса: если улетел за верхнюю границу экрана (Y < 0)
-          if (_player.y < 0) {
-            _spaceTimeCounter++;
-            if (_spaceTimeCounter > 180 && !_isGodMode) { // 180 кадров = 3 секунды [1]
-              _spaceTimeCounter = 0;
-              _gameOver();
-              return;
-            }
-          } else {
-            _spaceTimeCounter = 0; // Сброс, если самолётик вернулся в видимую зону
-          }
         } else {
-          // Обычный самолётик
           if (_isPressing) _player.vy -= 0.9; else _player.vy += 0.7;
-          _spaceTimeCounter = 0; // На обычном полу таймер всегда сброшен
         }
         _player.vy = _player.vy.clamp(-8, 8);
         _player.y += _player.vy;
 
-        // Ограничители высоты, чтобы не проваливался под пол
-        if (_player.y <= 60) { _player.y = 60; _player.vy = 0; }
-        if (_player.y >= _floorY - _player.size) { _player.y = _floorY - _player.size; _player.vy = 0; }
+        if (_player.y >= _floorY - _player.size) { 
+          _player.y = _floorY - _player.size; 
+          _player.vy = 0; 
+        }
       } 
-            else {
-        // 2. Физика кубика на кастомной карте
+      else {
         if (_isGravityInverted) {
-          _player.vy -= 1.3; // Гравитация тянет вверх к потолку
+          _player.vy -= 1.3; 
           if (_player.vy < -14) _player.vy = -14;
           _player.y += _player.vy;
-
-          // ИСПРАВЛЕНИЕ: Полноценный 3-секундный таймер смерти в небе для инвертированного кубика
-          if (_player.y < 0) {
-            _spaceTimeCounter++;
-            if (_spaceTimeCounter > 180 && !_isGodMode) { // 180 кадров = 3 секунды
-              _spaceTimeCounter = 0;
-              _gameOver(); // Улетает в небо и гарантированно умирает!
-              return;
-            }
-          } else {
-            // Сбрасываем счетчик, если кубик находится в видимой зоне между небом и потолком
-            if (_player.y > 10) _spaceTimeCounter = 0; 
-          }
-
-          if (_player.y <= 100 && _player.vy <= 0) {
-            _player.y = 100;
-            _player.vy = 0;
-            _player.isGrounded = true;
-            _spaceTimeCounter = 0; 
-          }
+          
+          // ИСПРАВЛЕНИЕ: Невидимый потолок y = 100 ПОЛНОСТЬЮ убран. 
+          // Кубик свободно летит вверх за пределы экрана.
         } else {
-          // Обычный режим кубика на полу
           _player.vy += _player.gravity;
           if (_player.vy > 15) _player.vy = 15;
           _player.y += _player.vy;
@@ -1055,11 +1018,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             _player.vy = 0;
             _player.isGrounded = true;
           }
-          _spaceTimeCounter = 0; // Сброс на обычном полу
         }
       }
     }
-    // Стандартные уровни 1, 2, 3
+    // СТАНДАРТНЫЕ УРОВНИ 1, 2, 3
     else {
       if (_player.isShip) {
         if (_isPressing) _player.vy -= 0.9; else _player.vy += 0.7;
@@ -1076,7 +1038,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         _player.vy = 0;
         _player.isGrounded = true;
       }
-      _spaceTimeCounter = 0;
     }
  
 
