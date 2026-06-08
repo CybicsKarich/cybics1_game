@@ -922,15 +922,17 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       }
     }
 
-        // --- ЭТАП 2: ФИЗИКА ДВИЖЕНИЯ (ГРАВИТАЦИЯ, ИНВЕРСИЯ И ОБСЧЁТ ТАЙМЕРА КОСМОСА) ---
+     // --- ЭТАП 2: ФИЗИКА ДВИЖЕНИЯ (ГРАВИТАЦИЯ, ИНВЕРСИЯ И ОБСЧЁТ ТАЙМЕРА КОСМОСА) ---
     bool wasGrounded = _player.isGrounded;
     _player.isGrounded = false;
 
+    // ======================================================================
     // ГЛОБАЛЬНАЯ ЛОГИКА ТАЙМЕРА КОСМОСА ДЛЯ ВСЕХ РЕЖИМОВ И УРОВНЕЙ (4 и 5)
+    // ======================================================================
+    // ИСПРАВЛЕНИЕ: Теперь условие работает СИНХРОННО для кубика и самолетика на 4 и 5 уровнях!
     if (_isGravityInverted && _player.y < 0) {
       _spaceTimeCounter++;
       
-      // ИСПРАВЛЕНИЕ: Никаких ограничений! Кубик улетает бесконечно далеко вверх
       if (_spaceTimeCounter > 180 && !_isGodMode) { // 180 кадров движка = 3 секунды
         _spaceTimeCounter = 0;
         _gameOver(); 
@@ -938,7 +940,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       }
     } else {
       if (_player.y >= 0) {
-        _spaceTimeCounter = 0;
+        _spaceTimeCounter = 0; // Сброс таймера в безопасной зоне
       }
     }
 
@@ -959,6 +961,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       else if (_isGravityInverted) {
         _player.vy -= 1.3;
         if (_player.vy < -14) _player.vy = -14;
+        
+        // ИСПРАВЛЕНИЕ: Позволяем кубику на 4 уровне беспрепятственно улетать в Y < 0, чтобы включить таймер
         _player.y += _player.vy;
 
         if (progressPct >= 64.0 && progressPct <= 69.0) {
@@ -967,7 +971,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             _player.vy = 0;
           }
         } else {
-          if (_player.y <= 5 && !wasGrounded && !_isGodMode && _player.vy < 0) { 
+          // Убираем здесь жесткую смерть при y <= 5, чтобы она не конфликтовала с 3-секундным таймером!
+          if (_player.y < -1500 && !_isGodMode) { 
             _gameOver(); 
             return; 
           }
@@ -988,13 +993,22 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     else if (_currentLevel == 5) {
       if (_player.isShip) {
         if (_isGravityInverted) {
+          // Инвертированный самолётик: зажали — летит вниз, отпустили — падает вверх (в космос)
           if (_isPressing) _player.vy += 0.9; else _player.vy -= 0.7;
         } else {
+          // Обычный самолётик
           if (_isPressing) _player.vy -= 0.9; else _player.vy += 0.7;
         }
         _player.vy = _player.vy.clamp(-8, 8);
         _player.y += _player.vy;
 
+        // ИСПРАВЛЕНИЕ: Убрали жесткий ограничитель у самолетика (y <= 60), если включена инверсия!
+        // Теперь самолётик в инверсии может свободно пересекать границу Y < 0 и улетать вверх.
+        if (!_isGravityInverted && _player.y <= 60) { 
+          _player.y = 60; 
+          _player.vy = 0; 
+        }
+        
         if (_player.y >= _floorY - _player.size) { 
           _player.y = _floorY - _player.size; 
           _player.vy = 0; 
@@ -1006,8 +1020,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           if (_player.vy < -14) _player.vy = -14;
           _player.y += _player.vy;
           
-          // ИСПРАВЛЕНИЕ: Невидимый потолок y = 100 ПОЛНОСТЬЮ убран. 
-          // Кубик свободно летит вверх за пределы экрана.
+          // Потолок y = 100 полностью убран, кубик свободно летит вверх за экран.
         } else {
           _player.vy += _player.gravity;
           if (_player.vy > 15) _player.vy = 15;
@@ -1039,7 +1052,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         _player.isGrounded = true;
       }
     }
- 
+
 
         // --- ЭТАП 3: РАСЧЕТ КОЛЛИЗИЙ И ДИНАМИЧЕСКИЙ ПРОГРЕСС ---
     _currentProgress = (progressPct.clamp(0, 100)).floor();
