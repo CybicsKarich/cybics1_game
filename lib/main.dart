@@ -397,10 +397,12 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   void _generateFixedLevel() {
     _obstacles.clear();
     _medals.clear();
+    _orbs.clear();
     _collectedThisRun.clear();
     double nextX = 700;
 
     if (_currentLevel == 1) {
+      _orbs.clear();
       int seed = 42;
       while (nextX < _levelLength - 1000) {
         double r = _seededRandom(seed++);
@@ -424,6 +426,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       _medals.add(Medal(id: 0, x: _levelLength * 0.52, y: _floorY - 140));
     } 
     else if (_currentLevel == 2) {
+      _orbs.clear();
       int seed = 999;
       while (nextX < _levelLength - 1000) {
         double progressPct = (nextX / _levelLength) * 100;
@@ -457,6 +460,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       _medals.add(Medal(id: 1, x: _levelLength * 0.435, y: _floorY - 30));
     } 
     else if (_currentLevel == 3) {
+      _orbs.clear();
       int seed = 888;
       bool spawnedTrap = false;
       bool spawnedShipTrap = false;
@@ -1152,18 +1156,28 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         }
         continue; 
       }
-
-      // ИСПРАВЛЕНИЕ: Портал Гравитации работает на всю высоту 400px и переворачивает куб
+      
+           // ИСПРАВЛЕНИЕ НЕДОЧЁТА: Портал гравитации на 4 уровне теперь вытянут на 400px, 
+      // чтобы кубик на 67% прогресса гарантированно падал вниз к монетке!
       if (obs.type == 'portal_grav') {
+        double portalHeight = (_currentLevel == 4) ? 400.0 : (obs.h > 0 ? obs.h : 120.0);
         if (_player.x + _player.size > obs.x && _player.x < obs.x + 40) {
-          if (_player.y + _player.size > obs.y && _player.y < obs.y + 400) {
-            if (_player.x >= obs.x && _player.x <= obs.x + 8) {
-              _isGravityInverted = !_isGravityInverted; // Первый портал перевернет на потолок, второй — вернет на пол!
-              _player.vy = 0;
+          if (_player.y + _player.size > obs.y && _player.y < obs.y + portalHeight) {
+            if (_currentLevel == 5) {
+              // Кастомный уровень: инвертирует режим при повторном входе
+              if (_player.x >= obs.x && _player.x <= obs.x + 8) {
+                _isGravityInverted = !_isGravityInverted;
+                _player.vy = 0;
+              }
+            } else {
+              // Стандартный 4 уровень: активирует триггеры по ходу прохождения
+              if (_player.x >= obs.x && _player.x <= obs.x + 8) {
+                _isGravityInverted = false; // Возвращаем кубик на обычную гравитацию пола!
+              }
             }
           }
         }
-        continue;
+        continue; 
       }
 
       bool stoodOnPlatform = false;
@@ -3232,17 +3246,18 @@ class GamePainter extends CustomPainter {
           canvas.drawRect(Rect.fromLTWH(renderX, obs.y, obs.w, obs.h > 0 ? obs.h : 30), paint); 
           paint.style = PaintingStyle.fill;
         }
-        // ИСПРАВЛЕНИЕ: Порталы в прохождении привязаны строго к obs.y (а не к renderY!)
                 else if (obs.type == 'portal_ship' || obs.type == 'portal_grav') {
           paint.style = PaintingStyle.fill;
           paint.color = obs.type == 'portal_ship' ? const Color(0x66A855F7) : const Color(0x59EAB308);
-          // Рисуем фоновый неоновый луч высотой 400 пикселей
-          canvas.drawRect(Rect.fromLTWH(renderX, obs.y, 40, 400), paint);
+          
+          // ИСПРАВЛЕНИЕ: Если это 4 уровень — вытягиваем луч на 400 пикселей до самого пола!
+          double renderHeight = (currentLevel == 4) ? 400.0 : (obs.h > 0 ? obs.h : 120.0);
+          canvas.drawRect(Rect.fromLTWH(renderX, obs.y, 40, renderHeight), paint);
           
           paint.style = PaintingStyle.stroke;
           paint.color = obs.type == 'portal_ship' ? const Color(0xFFC084FC) : const Color(0xFFFACC15);
           paint.strokeWidth = 5;
-          canvas.drawLine(Offset(renderX + 20, obs.y), Offset(renderX + 20, obs.y + 400), paint);
+          canvas.drawLine(Offset(renderX + 20, obs.y), Offset(renderX + 20, obs.y + renderHeight), paint);
           paint.style = PaintingStyle.fill;
         }
       }
