@@ -1322,10 +1322,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   if (_player.y > _gameHeight) {
       if (!_isGodMode) { _gameOver(); return; }
     }
-    // Обычная смерть при вылете наверх без инверсии (на случай багов)
-    if (_player.y < -50 && !_isGravityInverted) {
-      if (!_isGodMode) { _gameOver(); return; }
-    }
   } // <--- Это закрывающая фигурная скобка самого метода _updatePhysics()
 
 
