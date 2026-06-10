@@ -3089,20 +3089,23 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
   @override
   void dispose() {
-    _gameTimer?.cancel();
-    _deathVolumeTimer?.cancel(); 
-    _retryTimer?.cancel();  
+    // Возвращаем системные панели обратно, когда приложение полностью закрывается
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    
     _pulseController.dispose();
-    _gameTickNotifier.dispose();
+    _gameTimer?.cancel();
+    _retryTimer?.cancel();
     _menuPlayer.dispose();
     _level1Player.dispose();
     _level2Player.dispose();
     _level3Player.dispose();
     _level4Player.dispose();
-    _deathPlayer.dispose();
+    _searchController.dispose();
+    _levelNameController.dispose();
+    _consoleController.dispose();
     super.dispose();
   }
-}
+
 
 class GamePainter extends CustomPainter {
   final Player player;
