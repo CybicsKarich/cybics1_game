@@ -253,9 +253,14 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   Timer? _deathVolumeTimer;
   Timer? _retryTimer;
 
-  @override
+    @override
   void initState() {
     super.initState();
+    
+    // ИСПРАВЛЕНИЕ: Включаем режим полного погружения (Immersive Sticky)
+    // Это намертво прячет верхнюю панель времени и 3 боковые кнопки навигации приложения
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    
     _initData();
     _pulseController = AnimationController(
       duration: const Duration(seconds: 1),
