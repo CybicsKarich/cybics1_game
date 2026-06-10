@@ -3037,25 +3037,27 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           )
         ],
       ),
-      child: ElevatedButton(
+            child: ElevatedButton(
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.transparent,
           shadowColor: Colors.transparent,
+          // ИСПРАВЛЕНИЕ: Уменьшаем внутренние отступы по бокам для узких кнопок, чтобы текст не сжимался
+          padding: EdgeInsets.symmetric(horizontal: minWidth < 135 ? 4 : 16),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
-          // ИСПРАВЛЕНИЕ: Если кнопка отключена, Flutter сам применит к тексту полупрозрачный цвет
           disabledForegroundColor: Colors.white38, 
         ),
-        onPressed: onPressed, // Сюда теперь безопасно прилетит null
-                // ИСПРАВЛЕНИЕ: Если кнопка узкая (меньше 130px), уменьшаем шрифт до 12, чтобы текст влезал в одну строку
+        onPressed: onPressed, 
         child: Text(
           text, 
           style: TextStyle(
-            fontSize: minWidth < 135 ? 12 : 18, 
+            // ИСПРАВЛЕНИЕ: Ставим размер шрифта 10 для кнопки "Редактировать"
+            fontSize: minWidth < 135 ? 10 : 18, 
             fontWeight: FontWeight.bold, 
-            color: Colors.white
+            color: Colors.white,
           ),
           maxLines: 1,
-          overflow: TextOverflow.ellipsis,
+          // Убираем жесткое усечение, давая тексту занять всё свободное пространство кнопки
+          softWrap: false,
         ),
       ),
     );
@@ -3724,11 +3726,11 @@ class EditorBackgroundPainter extends CustomPainter {
     double startGridX = -(cameraX % step);
     double startGridY = -(cameraY % step); // ИСПРАВЛЕНИЕ: Сетка движется по вертикали
     
+    // Рисуем вертикальные линии с учетом скролла камеры
     for (double x = startGridX; x < size.width / scale; x += step) {
-      canvas.drawLine(Offset(x, 0), Offset(x, gameHeight), paint);
+      canvas.drawLine(Offset(x, 0), Offset(x, floorY), paint);
     }
-    // Линии по Y теперь скроллятся
-    for (double y = startGridY; y < gameHeight; y += step) {
+    for (double y = floorY; y >= 0; y -= step) {
       canvas.drawLine(Offset(0, y), Offset(size.width / scale, y), paint);
     }
 
