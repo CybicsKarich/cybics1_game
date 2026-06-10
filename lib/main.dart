@@ -3105,7 +3105,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     _consoleController.dispose();
     super.dispose();
   }
-
+}
 
 class GamePainter extends CustomPainter {
   final Player player;
