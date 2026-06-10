@@ -73,6 +73,8 @@ class GameOrb {
   final double y;
   bool collected;
   GameOrb({required this.x, required this.y, this.collected = false});
+
+  GameOrb clone() => GameOrb(x: this.x, y: this.y, collected: false);
 }
 
 class Player {
@@ -811,12 +813,15 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
       _generateFixedLevel();
 
-      if (_currentLevel == 5 && _currentEditingLevel != null) {
-        // ИСПРАВЛЕНИЕ 3: Убрали принудительный _orbs.clear() из верхнего блока! 
-        // Теперь постройки кастомного уровня выгружаются в чистые, готовые списки физического движка
+            if (_currentLevel == 5 && _currentEditingLevel != null) {
         _obstacles = List.from(_currentEditingLevel!.obstacles);
-        _orbs = List.from(_currentEditingLevel!.orbs);
+        
+        // ИСПРАВЛЕНИЕ: Глубокое клонирование сфер! 
+        // Теперь каждая попытка создает новые физические сферы в игре, а оригиналы в редакторе не портятся!
+        _orbs = _currentEditingLevel!.orbs.map((orb) => orb.clone()).toList();
+        
         _medals = List.from(_currentEditingLevel!.medals);
+
 
         double farthestX = 2000.0;
         for (var obs in _obstacles) { if (obs.x > farthestX) farthestX = obs.x; }
