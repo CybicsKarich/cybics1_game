@@ -2071,7 +2071,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                 _editorCameraY = (_editorCameraY - details.delta.dy).clamp(-300.0, 300.0);
               });
             },
-            onTapDown: (details) {
+                        onTapDown: (details) {
               if (_currentEditingLevel == null || _isPaused) return;
 
               RenderBox renderBox = context.findRenderObject() as RenderBox;
@@ -2081,10 +2081,23 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               double rawX = details.localPosition.dx / scale;
               double rawY = details.localPosition.dy / scale;
 
+              if (rawY >= _floorY || rawY < 60) return;
+
               double step = 30.0;
-              // ИСПРАВЛЕНИЕ: Привязка по X и по Y теперь учитывает скролл во все стороны!
+              
+              // Координата X остается прежней (с учетом горизонтального скролла)
               double worldX = (((rawX + _editorCameraX) / step).floor() * step);
-              double worldY = (((rawY + _editorCameraY) / step).floor() * step);
+              
+              // ======================================================================
+              // ИСПРАВЛЕНИЕ: МАТЕМАТИКА МАГНИТНОЙ СЕТКИ ОТТАЛКИВАЕТСЯ СТРОГО ОТ ПОЛА!
+              // ======================================================================
+              // Мы берем абсолютную координату клика с учетом вертикальной камеры,
+              // вычитаем её из линии пола (500) и округляем по шагу 30 вверх.
+              // Это гарантирует, что первый ряд над платформой будет целым (ровно 30px),
+              // а постройки встанут строго НА синюю линию горизонта без проваливаний!
+              double relativeYFromFloor = (_floorY - (rawY + _editorCameraY));
+              double snappedRelativeY = (relativeYFromFloor / step).floor() * step;
+              double worldY = _floorY - snappedRelativeY;
 
               _takeSnapshot();
 
