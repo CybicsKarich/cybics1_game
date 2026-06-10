@@ -3699,7 +3699,7 @@ class EditorBackgroundPainter extends CustomPainter {
     required this.currentLevelData,
   });
 
-  @override
+    @override
   void paint(Canvas canvas, Size size) {
     double scale = size.height / gameHeight;
     canvas.save();
@@ -3707,7 +3707,7 @@ class EditorBackgroundPainter extends CustomPainter {
 
     final Paint paint = Paint();
 
-    // 1. Тёмный фон
+    // 1. Тёмный фон конструктора
     final Rect bgRect = Rect.fromLTWH(0, 0, size.width / scale, gameHeight);
     paint.shader = const LinearGradient(
       colors: [Color(0xFF1E1E2E), Color(0xFF11111B)],
@@ -3717,6 +3717,11 @@ class EditorBackgroundPainter extends CustomPainter {
     canvas.drawRect(bgRect, paint);
     paint.shader = null;
 
+    // ======================================================================
+    // ИСПРАВЛЕНИЕ: ДИНАМИЧЕСКИЙ ПОЛ ДЛЯ СИНХРОНИЗАЦИИ СЕТКИ
+    // ======================================================================
+    double dynamicFloorY = floorY - cameraY; // Вычисляем положение пола на экране
+
     // 2. Отрисовка тонкой сетки 30x30px
     paint.color = Colors.white.withOpacity(0.04); 
     paint.style = PaintingStyle.stroke;
@@ -3724,41 +3729,38 @@ class EditorBackgroundPainter extends CustomPainter {
     
     double step = 30.0; 
     double startGridX = -(cameraX % step);
-    double startGridY = -(cameraY % step); // ИСПРАВЛЕНИЕ: Сетка движется по вертикали
     
-    // Рисуем вертикальные линии с учетом скролла камеры
+    // Вертикальные линии сетки (привязаны к скроллу X)
     for (double x = startGridX; x < size.width / scale; x += step) {
-      canvas.drawLine(Offset(x, 0), Offset(x, floorY), paint);
+      canvas.drawLine(Offset(x, 0), Offset(x, gameHeight), paint);
     }
-    for (double y = floorY; y >= 0; y -= step) {
+    
+    // ИСПРАВЛЕНИЕ: Горизонтальные линии теперь отсчитываются от DYNAMICFLOORY!
+    // Благодаря этому при движении вверх/вниз сетка намертво прикреплена к линии земли.
+    // Сетка идет вверх до самого неба конструктора
+    for (double y = dynamicFloorY; y >= 0; y -= step) {
+      canvas.drawLine(Offset(0, y), Offset(size.width / scale, y), paint);
+    }
+    // Сетка идет вниз под пол (для плавности при скролле)
+    for (double y = dynamicFloorY + step; y < gameHeight; y += step) {
       canvas.drawLine(Offset(0, y), Offset(size.width / scale, y), paint);
     }
 
-        // ИСПРАВЛЕНИЕ: Гарантированный возврат Красного Флажка спавна на линию пола
+    // Красный флажок спавна
     double flagRenderX = 100.0 - cameraX;
     if (flagRenderX > -50 && flagRenderX < (size.width / scale) + 50) {
-      paint.style = PaintingStyle.stroke; 
-      paint.color = Colors.grey; 
-      paint.strokeWidth = 3;
-      // Флагшток стоит строго на полу floorY - cameraY
-      canvas.drawLine(Offset(flagRenderX, floorY - cameraY), Offset(flagRenderX, floorY - cameraY - 50), paint);
-      
-      paint.style = PaintingStyle.fill; 
-      paint.color = const Color(0xFFEF4444);
-      Path flagCloth = Path()
-        ..moveTo(flagRenderX, floorY - cameraY - 50)
-        ..lineTo(flagRenderX + 20, floorY - cameraY - 40)
-        ..lineTo(flagRenderX, floorY - cameraY - 30)
-        ..close();
+      paint.style = PaintingStyle.stroke; paint.color = Colors.grey; paint.strokeWidth = 3;
+      canvas.drawLine(Offset(flagRenderX, dynamicFloorY), Offset(flagRenderX, dynamicFloorY - 50), paint);
+      paint.style = PaintingStyle.fill; paint.color = const Color(0xFFEF4444);
+      Path flagCloth = Path()..moveTo(flagRenderX, dynamicFloorY - 50)..lineTo(flagRenderX + 20, dynamicFloorY - 40)..lineTo(flagRenderX, dynamicFloorY - 30)..close();
       canvas.drawPath(flagCloth, paint);
     }
 
-
-    // 3. ОТРИСОВКА ПОСТРОЕК НА СЕТКЕ (Вычитаем cameraY из всех координат высоты!)
+    // 3. ОТРИСОВКА ПОСТРОЕК НА СЕТКЕ
     if (currentLevelData != null) {
       for (var obs in currentLevelData!.obstacles) {
         double renderX = obs.x - cameraX;
-        double renderY = obs.y - cameraY; // ИСПРАВЛЕНИЕ: Вычитаем сдвиг Y!
+        double renderY = obs.y - cameraY; 
         
         if (renderX > -200 && renderX < (size.width / scale) + 200) {
           if (obs.type == 'platform') {
@@ -3786,50 +3788,33 @@ class EditorBackgroundPainter extends CustomPainter {
             canvas.drawPath(spikePath, paint);
             paint.style = PaintingStyle.stroke; paint.color = const Color(0xFFEF4444); paint.strokeWidth = 2.5; canvas.drawPath(spikePath, paint);
           }
-                    else if (obs.type == 'portal_ship' || obs.type == 'portal_grav') {
-            paint.style = PaintingStyle.fill;
-            paint.color = obs.type == 'portal_ship' ? const Color(0x66A855F7) : const Color(0x59EAB308);
-            // В редакторе тоже вытягиваем на 400px с учетом вертикального скролла renderY
+          else if (obs.type == 'portal_ship' || obs.type == 'portal_grav') {
+            paint.style = PaintingStyle.fill; paint.color = obs.type == 'portal_ship' ? const Color(0x66A855F7) : const Color(0x59EAB308);
             canvas.drawRect(Rect.fromLTWH(renderX, renderY, 40, 400), paint);
-
-            paint.style = PaintingStyle.stroke;
-            paint.color = obs.type == 'portal_ship' ? const Color(0xFFC084FC) : const Color(0xFFFACC15);
-            paint.strokeWidth = 5;
+            paint.style = PaintingStyle.stroke; paint.color = obs.type == 'portal_ship' ? const Color(0xFFC084FC) : const Color(0xFFFACC15); paint.strokeWidth = 5;
             canvas.drawLine(Offset(renderX + 20, renderY), Offset(renderX + 20, renderY + 400), paint);
             paint.style = PaintingStyle.fill;
           }
         }
       }
 
-            // ИСПРАВЛЕНИЕ: Сферы прыжка в редакторе теперь тоже ЖЁЛТЫЕ и полностью соответствуют игре
+      // Сферы прыжка
       for (var orb in currentLevelData!.orbs) {
         double renderX = orb.x - cameraX;
-        double renderY = orb.y - cameraY;
+        double renderY = orb.y - cameraY; 
         if (renderX > -50 && renderX < (size.width / scale) + 50) {
-          canvas.save();
-          canvas.translate(renderX, renderY);
-          
-          paint.style = PaintingStyle.stroke;
-          paint.color = const Color(0xFFFACC15); // Перевели на жёлтый неоновый контур
-          paint.strokeWidth = 3.5;
-          canvas.drawCircle(Offset.zero, 22, paint);
-          
-          paint.strokeWidth = 2.5;
-          canvas.drawLine(const Offset(-15, 0), const Offset(15, 0), paint);
-          canvas.drawLine(const Offset(0, -15), const Offset(0, 15), paint);
-          
-          paint.color = Colors.white;
-          paint.style = PaintingStyle.fill;
-          canvas.drawCircle(Offset.zero, 9, paint);
+          canvas.save(); canvas.translate(renderX, renderY);
+          paint.style = PaintingStyle.stroke; paint.color = const Color(0xFFFACC15); paint.strokeWidth = 3.5; canvas.drawCircle(Offset.zero, 22, paint);
+          paint.strokeWidth = 2.5; canvas.drawLine(const Offset(-15, 0), const Offset(15, 0), paint); canvas.drawLine(const Offset(0, -15), const Offset(0, 15), paint);
+          paint.color = Colors.white; paint.style = PaintingStyle.fill; canvas.drawCircle(Offset.zero, 9, paint);
           canvas.restore();
         }
       }
 
-
       // Медали
       for (var m in currentLevelData!.medals) {
         double renderX = m.x - cameraX;
-        double renderY = m.y - cameraY; // ИСПРАВЛЕНИЕ: Учет высоты
+        double renderY = m.y - cameraY; 
         if (renderX > -50 && renderX < (size.width / scale) + 50) {
           paint.style = PaintingStyle.fill; paint.color = const Color(0xFFF59E0B); canvas.drawCircle(Offset(renderX, renderY), 16, paint);
           paint.style = PaintingStyle.stroke; paint.color = Colors.white; paint.strokeWidth = 2.5; canvas.drawCircle(Offset(renderX, renderY), 16, paint);
@@ -3840,14 +3825,13 @@ class EditorBackgroundPainter extends CustomPainter {
       }
     }
 
-    // 4. Линия пола
+    // 4. Линия пола (Нижняя платформа)
     double maxFloorW = (levelLength - cameraX).clamp(0, size.width / scale);
-    double floorRenderY = floorY - cameraY; // ИСПРАВЛЕНИЕ: Пол движется по вертикали
     if (maxFloorW > 0) {
       paint.style = PaintingStyle.fill; paint.color = const Color(0xFF181825);
-      canvas.drawRect(Rect.fromLTWH(0, floorRenderY, maxFloorW, gameHeight - floorRenderY), paint);
+      canvas.drawRect(Rect.fromLTWH(0, dynamicFloorY, maxFloorW, gameHeight - dynamicFloorY), paint);
       paint.color = const Color(0xFF89B4FA); paint.style = PaintingStyle.stroke; paint.strokeWidth = 3;
-      canvas.drawLine(Offset(0, floorRenderY), Offset(maxFloorW, floorRenderY), paint);
+      canvas.drawLine(Offset(0, dynamicFloorY), Offset(maxFloorW, dynamicFloorY), paint);
     }
 
     canvas.restore();
@@ -3856,6 +3840,3 @@ class EditorBackgroundPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant EditorBackgroundPainter oldDelegate) => true;
 }
-
-
-
