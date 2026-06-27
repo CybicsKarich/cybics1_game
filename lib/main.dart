@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:io' show Platform;
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -257,9 +259,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   void initState() {
     super.initState();
     
-    // ИСПРАВЛЕНИЕ: Включаем режим полного погружения (Immersive Sticky)
-    // Это намертво прячет верхнюю панель времени и 3 боковые кнопки навигации приложения
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    // ИСПРАВЛЕНИЕ ОШИБКИ 4: Защита от краша на Web, Windows, macOS, Linux
+    if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    }
     
     _initData();
     _pulseController = AnimationController(
@@ -267,6 +270,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       vsync: this,
     )..repeat(reverse: true);
   }
+
 
   Future<void> _initData() async {
     _prefs = await SharedPreferences.getInstance();
@@ -2205,16 +2209,17 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           ),
         ),
 
-        Positioned(
+                Positioned(
           top: 15,
           left: 15,
           child: Column(
             children: [
-              // ИСПРАВЛЕНИЕ: backgroundColor перенесен в style: IconButton.styleFrom
               IconButton(
                 icon: Icon(Icons.undo, size: 36, color: canUndo ? const Color(0xFF22C55E) : Colors.grey),
                 style: IconButton.styleFrom(backgroundColor: canUndo ? Colors.black45 : Colors.black12),
                 onPressed: !canUndo ? null : () {
+                  // ИСПРАВЛЕНИЕ ОШИБКИ 6: Защита от краша при пустой истории
+                  if (_undoHistory.isEmpty) return;
                   setState(() {
                     _redoHistory.add(jsonEncode(_currentEditingLevel!.toJson()));
                     String snapshot = _undoHistory.removeLast();
@@ -2227,6 +2232,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                 icon: Icon(Icons.redo, size: 36, color: canRedo ? const Color(0xFF22C55E) : Colors.grey),
                 style: IconButton.styleFrom(backgroundColor: canRedo ? Colors.black45 : Colors.black12),
                 onPressed: !canRedo ? null : () {
+                  // ИСПРАВЛЕНИЕ ОШИБКИ 6: Защита от краша при пустом Redo
+                  if (_redoHistory.isEmpty) return;
                   setState(() {
                     _undoHistory.add(jsonEncode(_currentEditingLevel!.toJson()));
                     String snapshot = _redoHistory.removeLast();
@@ -2662,31 +2669,24 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                 );
               }),
             ),
-            
-                        const SizedBox(height: 25),
-            
-            // Ряд из трех кнопок
+             const SizedBox(height: 25),
+             // Ряд из двух кнопок вместо трех
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // 1. Кнопка Создать (пока null)
-                _buildBtn('Создать', null, minWidth: 140), 
-                
-                const SizedBox(width: 15),
-                
-                // 2. ИСПРАВЛЕНИЕ: Кнопка Сохранить обёрнута в зелёный неон со свечением
+                // ИСПРАВЛЕНИЕ ОШИБКИ 5: Переименовали рабочую кнопку в «Создать»
                 Container(
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(25),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF22C55E).withOpacity(0.4), // Зелёное свечение
+                        color: const Color(0xFF22C55E).withOpacity(0.4),
                         blurRadius: 15,
                         offset: const Offset(0, 4),
                       )
                     ],
                   ),
-                  child: _buildBtn('Сохранить', () {
+                  child: _buildBtn('Создать', () {
                     String enteredName = _levelNameController.text.trim();
                     if (enteredName.isEmpty) enteredName = "Без названия";
 
@@ -2708,7 +2708,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                 
                 const SizedBox(width: 15),
                 
-                // 3. Кнопка Отмена
                 _buildBtn('Отмена', () {
                   FocusScope.of(context).unfocus();
                   setState(() { _state = GameState.createdLevelsMenu; });
@@ -2965,11 +2964,15 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               setState(() { _isPaused = false; });
               _startMusicSequencer();
             }),
-                        _buildBtn('В меню', () {
+             _buildBtn('В меню', () {
+              // ИСПРАВЛЕНИЕ ОШИБКИ 3: Гарантированно глушим все таймеры при выходе
+              _gameTimer?.cancel();
+              _retryTimer?.cancel();
+              _deathVolumeTimer?.cancel();
+              
               setState(() {
                 _isPlaying = false;
                 _isPaused = false;
-                // ИСПРАВЛЕНИЕ: Возвращает туда, откуда зашли (в Поиск, Созданные или Редактор)
                 _state = _currentLevel == 5 ? _customLevelLaunchSource : GameState.levelsMenu;
               });
               _startMusicSequencer();
@@ -3089,8 +3092,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
   @override
   void dispose() {
-    // Возвращаем системные панели обратно, когда приложение полностью закрывается
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    // ИСПРАВЛЕНИЕ ОШИБКИ 4: Защита при закрытии приложения
+    if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    }
     
     _pulseController.dispose();
     _gameTimer?.cancel();
@@ -3784,24 +3789,28 @@ class EditorBackgroundPainter extends CustomPainter {
 
     // 3. ОТРИСОВКА ПОСТРОЕК НА СЕТКЕ
     if (currentLevelData != null) {
+      // ИСПРАВЛЕНИЕ ОШИБОК 1 и 2: Корректный renderY для шипов и порталов
       for (var obs in currentLevelData!.obstacles) {
         double renderX = obs.x - cameraX;
-        double renderY = obs.y - cameraY; 
         
         if (renderX > -200 && renderX < (size.width / scale) + 200) {
           if (obs.type == 'platform') {
+            double renderY = obs.y - cameraY; 
             paint.style = PaintingStyle.fill; paint.color = const Color(0xFF334155);
             canvas.drawRect(Rect.fromLTWH(renderX, renderY, obs.w > 0 ? obs.w : 30, obs.h > 0 ? obs.h : 30), paint);
             paint.style = PaintingStyle.stroke; paint.color = const Color(0xFF475569); paint.strokeWidth = 3;
             canvas.drawRect(Rect.fromLTWH(renderX, renderY, obs.w > 0 ? obs.w : 30, obs.h > 0 ? obs.h : 30), paint);
           } 
           else if (obs.type == 'spike') {
+            // Отрезаем cameraY от абсолютной координаты, чтобы шип не улетал
+            double renderY = obs.y - cameraY;
             paint.style = PaintingStyle.fill; paint.color = const Color(0xFF0F172A);
             Path spikePath = Path()..moveTo(renderX, renderY)..lineTo(renderX + 30, renderY)..lineTo(renderX + 15, renderY - 30)..close();
             canvas.drawPath(spikePath, paint);
             paint.style = PaintingStyle.stroke; paint.color = const Color(0xFFF1F5F9); paint.strokeWidth = 2.5; canvas.drawPath(spikePath, paint);
           }
           else if (obs.type == 'spike_mark') {
+            double renderY = obs.y - cameraY;
             paint.style = PaintingStyle.fill; paint.color = const Color(0xFF0F172A);
             Path spikePath = Path()..moveTo(renderX, renderY)..lineTo(renderX + 30, renderY)..lineTo(renderX + 15, renderY - 30)..close();
             canvas.drawPath(spikePath, paint);
@@ -3809,16 +3818,19 @@ class EditorBackgroundPainter extends CustomPainter {
             paint.style = PaintingStyle.fill; paint.color = const Color(0xFFEA580C); canvas.drawRect(Rect.fromLTWH(renderX + 13, renderY - 22, 4, 8), paint); canvas.drawCircle(Offset(renderX + 15, renderY - 8), 2, paint);
           }
           else if (obs.type == 'spike_upside') {
+            double renderY = obs.y - cameraY;
             paint.style = PaintingStyle.fill; paint.color = const Color(0xFF0F172A);
             Path spikePath = Path()..moveTo(renderX, renderY)..lineTo(renderX + 30, renderY)..lineTo(renderX + 15, renderY + 30)..close();
             canvas.drawPath(spikePath, paint);
             paint.style = PaintingStyle.stroke; paint.color = const Color(0xFFEF4444); paint.strokeWidth = 2.5; canvas.drawPath(spikePath, paint);
           }
           else if (obs.type == 'portal_ship' || obs.type == 'portal_grav') {
+            // Жестко привязываем верх портала к линии 100 с учетом скролла
+            double portalTopY = 100.0 - cameraY;
             paint.style = PaintingStyle.fill; paint.color = obs.type == 'portal_ship' ? const Color(0x66A855F7) : const Color(0x59EAB308);
-            canvas.drawRect(Rect.fromLTWH(renderX, renderY, 40, 400), paint);
+            canvas.drawRect(Rect.fromLTWH(renderX, portalTopY, 40, 400), paint);
             paint.style = PaintingStyle.stroke; paint.color = obs.type == 'portal_ship' ? const Color(0xFFC084FC) : const Color(0xFFFACC15); paint.strokeWidth = 5;
-            canvas.drawLine(Offset(renderX + 20, renderY), Offset(renderX + 20, renderY + 400), paint);
+            canvas.drawLine(Offset(renderX + 20, portalTopY), Offset(renderX + 20, portalTopY + 400), paint);
             paint.style = PaintingStyle.fill;
           }
         }
