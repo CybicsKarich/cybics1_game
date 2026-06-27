@@ -315,7 +315,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     _deathPlayer.setVolume(vol * 0.5);
   }
 
-      void _startMusicSequencer() async {
+        void _startMusicSequencer() async {
     try {
       await _menuPlayer.setReleaseMode(ReleaseMode.loop);
       await _level1Player.setReleaseMode(ReleaseMode.loop);
@@ -329,7 +329,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         AudioPlayer activePlayer;
         String trackAsset;
 
-        // Определяем, какой плеер и какой трек должны сейчас работать
+        // Строго определяем плеер и трек для текущего уровня
         if (_currentLevel == 5 && _currentEditingLevel != null) {
           trackAsset = _currentEditingLevel!.selectedMusic;
           activePlayer = _level1Player; 
@@ -341,32 +341,34 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         }
 
         if (trackAsset != 'none') {
-          // ИСПРАВЛЕНИЕ: Если вышли из паузы, просто снимаем плеер с удержания
           if (_isPaused) {
+            // ИСПРАВЛЕНИЕ: Музыка была на паузе — просто снимаем с паузы, нативный индекс сохранен!
             await activePlayer.resume();
           } else {
-            // Если это старт раунда, глушим ВСЕ треки, чтобы очистить каналы, и запускаем нужный с нуля
-            await _level1Player.stop();
-            await _level2Player.stop();
-            await _level3Player.stop();
-            await _level4Player.stop();
-            
+            // ИСПРАВЛЕНИЕ: Это новый старт раунда — только тогда ставим на паузу старые плееры,
+            // а для текущего плеера принудительно делаем сброс позиции и полноценный запуск!
+            if (_currentLevel != 1) await _level1Player.pause();
+            if (_currentLevel != 2) await _level2Player.pause();
+            if (_currentLevel != 3) await _level3Player.pause();
+            if (_currentLevel != 4) await _level4Player.pause();
+
             await activePlayer.seek(Duration.zero);
             await activePlayer.play(AssetSource(trackAsset));
           }
         }
       } else {
-        // Если вышли в любые меню игры — глушим все игровые плееры
-        await _level1Player.stop();
-        await _level2Player.stop();
-        await _level3Player.stop();
-        await _level4Player.stop();
+        // Если игрок вышел в меню — глушим все игровые плееры через pause (чтобы не ломать ресурсы)
+        await _level1Player.pause();
+        await _level2Player.pause();
+        await _level3Player.pause();
+        await _level4Player.pause();
         await _menuPlayer.play(AssetSource('menu.mp3'));
       }
     } catch (e) {
       debugPrint("Ошибка аудиосеквенсора: $e");
     }
   }
+
 
 
   Future<void> _stopAllLevelTracks() async {
@@ -380,7 +382,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     }
   }
 
-    void _playDeathSound() async {
+      void _playDeathSound() async {
     try {
       _deathVolumeTimer?.cancel(); 
 
@@ -397,25 +399,26 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         else { activePlayer = _level4Player; trackAsset = 'level4.mp3'; }
       }
 
-      // Принудительно останавливаем музыку уровня на время взрыва
-      await activePlayer.stop();
+      // Вместо жесткого stop() временно глушим громкость плеера уровня до нуля
+      await activePlayer.setVolume(0.0);
 
-      // Воспроизводим звук смерти
+      // Воспроизводим взрыв смерти
       await _deathPlayer.stop();
       await _deathPlayer.setVolume((_volume / 100.0) * 0.4);
       await _deathPlayer.play(AssetSource('death.mp3'));
 
       if (trackAsset != 'none') {
         double normalVol = _volume / 100.0;
-        // Возвращаем громкость, отматываем на начало и запускаем заново
-        await activePlayer.setVolume(normalVol);
+        // Мгновенно отматываем трек назад и возвращаем исходный уровень звука раунда
         await activePlayer.seek(Duration.zero);
-        await activePlayer.play(AssetSource(trackAsset));
+        await activePlayer.setVolume(normalVol);
+        await activePlayer.resume();
       }
     } catch (e) {
       debugPrint("Ошибка перезапуска музыки при смерти: $e");
     }
   }
+
 
 
 
@@ -2428,13 +2431,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             const SizedBox(height: 20),
             
                         _buildBtn('Продолжить', () {
-              // Здесь тоже код должен быть внутри фигурных скобок
+              // ИСПРАВЛЕНИЕ: Синхронно восстанавливаем воспроизведение трека для редактора
               _startMusicSequencer();
-              
               setState(() { 
                 _isPaused = false; 
               });
-            }),
+            }, minWidth: 280),
+            
 
             
                         // 2. Сохранить изменения и сразу запустить тест уровня
@@ -3046,9 +3049,12 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             const Text('ПАУЗА', style: TextStyle(fontSize: 44, color: Color(0xFF00F2FE), fontWeight: FontWeight.bold)),
             Text('Рекорд уровня: $currentRecord%', style: const TextStyle(fontSize: 18, color: Colors.grey)),
             const SizedBox(height: 30),
-            _buildBtn('Продолжить', () {
+            _buildBtn('Продолжить', () async {
+              // ИСПРАВЛЕНИЕ: Сначала снимаем плеер с паузы, затем обновляем стейт флага
               _startMusicSequencer();
-              setState(() { _isPaused = false; });
+              setState(() { 
+                _isPaused = false; 
+              });
             }),
              _buildBtn('В меню', () {
               // ИСПРАВЛЕНИЕ ОШИБКИ 3: Гарантированно глушим все таймеры при выходе
