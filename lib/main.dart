@@ -315,7 +315,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     _deathPlayer.setVolume(vol * 0.5);
   }
 
-    void _startMusicSequencer() async {
+      void _startMusicSequencer() async {
     try {
       await _menuPlayer.setReleaseMode(ReleaseMode.loop);
       await _level1Player.setReleaseMode(ReleaseMode.loop);
@@ -325,23 +325,32 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
       if (_state == GameState.gameplay) {
         await _menuPlayer.stop();
-        await _stopAllLevelTracks();
 
-        if (!_isPaused) {
-                    if (_currentEditingLevel != null) {
-            // ИСПРАВЛЕНИЕ: Если трек равен 'none' — глушим музыку до тех пор, пока игрок не выберет её в консоли!
-            if (_currentEditingLevel!.selectedMusic == 'none') {
-              await _level1Player.stop();
-            } else {
-              await _level1Player.play(AssetSource(_currentEditingLevel!.selectedMusic));
-            }
+        AudioPlayer activePlayer;
+        String trackAsset;
+
+        if (_currentEditingLevel != null) {
+          trackAsset = _currentEditingLevel!.selectedMusic;
+          activePlayer = _level1Player; // Кастомные уровни используют первый плеер
+        } else {
+          if (_currentLevel == 1) { activePlayer = _level1Player; trackAsset = 'level1.mp3'; }
+          else if (_currentLevel == 2) { activePlayer = _level2Player; trackAsset = 'level2.mp3'; }
+          else if (_currentLevel == 3) { activePlayer = _level3Player; trackAsset = 'level3.mp3'; }
+          else { activePlayer = _level4Player; trackAsset = 'level4.mp3'; }
+        }
+
+        if (trackAsset != 'none') {
+          // ИСПРАВЛЕНИЕ: Если игра была на паузе, просто снимаем с паузы (.resume)
+          if (_isPaused) {
+            await activePlayer.resume();
           } else {
-            // Обычные стандартные уровни игры
-            if (_currentLevel == 1) await _level1Player.play(AssetSource('level1.mp3'));
-            if (_currentLevel == 2) await _level2Player.play(AssetSource('level2.mp3'));
-            if (_currentLevel == 3) await _level3Player.play(AssetSource('level3.mp3'));
-            if (_currentLevel == 4) await _level4Player.play(AssetSource('level4.mp3'));
+            // Если это совершенно новый старт раунда, глушим остальные треки и запускаем с нуля
+            await _stopAllLevelTracks();
+            await activePlayer.seek(Duration.zero);
+            await activePlayer.play(AssetSource(trackAsset));
           }
+        } else {
+          await _stopAllLevelTracks();
         }
       } else {
         await _stopAllLevelTracks();
@@ -351,6 +360,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       debugPrint("Ошибка аудиосеквенсора: $e");
     }
   }
+
 
 
   Future<void> _stopAllLevelTracks() async {
@@ -364,36 +374,37 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     }
   }
 
-    void _playDeathSound() async {
+      void _playDeathSound() async {
     try {
-      // ИСПРАВЛЕНИЕ: Отменяем старый таймер громкости, если игрок умер слишком быстро
       _deathVolumeTimer?.cancel(); 
-
       await _deathPlayer.stop();
       await _deathPlayer.setVolume((_volume / 100.0) * 0.2);
       await _deathPlayer.play(AssetSource('death.mp3'));
 
       AudioPlayer activePlayer;
-      if (_currentLevel == 1) activePlayer = _level1Player;
-      else if (_currentLevel == 2) activePlayer = _level2Player;
-      else if (_currentLevel == 3) activePlayer = _level3Player;
-      else activePlayer = _level4Player;
+      String trackAsset;
 
-      double normalVol = _volume / 100.0;
-      
-      // ИСПРАВЛЕНИЕ: Убираем await с фоновых операций, чтобы UI не зависал в момент смерти
-      activePlayer.setVolume(normalVol * 0.2);
-      activePlayer.seek(Duration.zero);
-      await activePlayer.play(
-        _currentLevel == 1 ? AssetSource('level1.mp3') : 
-        (_currentLevel == 2 ? AssetSource('level2.mp3') : 
-        (_currentLevel == 3 ? AssetSource('level3.mp3') : AssetSource('level4.mp3')))
-      );
+      if (_currentLevel == 5 && _currentEditingLevel != null) {
+        activePlayer = _level1Player;
+        trackAsset = _currentEditingLevel!.selectedMusic;
+      } else {
+        if (_currentLevel == 1) { activePlayer = _level1Player; trackAsset = 'level1.mp3'; }
+        else if (_currentLevel == 2) { activePlayer = _level2Player; trackAsset = 'level2.mp3'; }
+        else if (_currentLevel == 3) { activePlayer = _level3Player; trackAsset = 'level3.mp3'; }
+        else { activePlayer = _level4Player; trackAsset = 'level4.mp3'; }
+      }
 
-      // ИСПРАВЛЕНИЕ: Сохраняем таймер в переменную класса
-      _deathVolumeTimer = Timer(const Duration(milliseconds: 300), () async {
-        await activePlayer.setVolume(normalVol);
-      });
+      if (trackAsset != 'none') {
+        double normalVol = _volume / 100.0;
+        await activePlayer.setVolume(normalVol * 0.2);
+        // ИСПРАВЛЕНИЕ: Принудительно отматываем в самое начало
+        await activePlayer.seek(Duration.zero);
+        await activePlayer.resume();
+
+        _deathVolumeTimer = Timer(const Duration(milliseconds: 300), () async {
+          await activePlayer.setVolume(normalVol);
+        });
+      }
     } catch (e) {
       debugPrint("Ошибка перезапуска музыки при смерти: $e");
     }
@@ -1937,10 +1948,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                                   Column(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      _buildBtn('Редактировать', () {
+                                        _buildBtn('Редактировать', () {
                                         setState(() {
                                           _currentEditingLevel = lvl;
                                           _editorCameraX = 0;
+                                          _editorCameraY = 0;
+                                          // ИСПРАВЛЕНИЕ: Открываем полную длину для свободного строительства
+                                          _levelLength = 20000.0; 
                                           _undoHistory.clear();
                                           _redoHistory.clear();
                                           _state = GameState.editor;
@@ -2085,7 +2099,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                 _editorCameraY = (_editorCameraY - details.delta.dy).clamp(-300.0, 300.0);
               });
             },
-                        onTapDown: (details) {
+                          onTapDown: (details) {
               if (_currentEditingLevel == null || _isPaused) return;
 
               RenderBox renderBox = context.findRenderObject() as RenderBox;
@@ -2095,25 +2109,25 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               double rawX = details.localPosition.dx / scale;
               double rawY = details.localPosition.dy / scale;
 
-              if (rawY >= _floorY || rawY < 60) return;
+              // ИСПРАВЛЕНИЕ: Рассчитываем точную мировую координату клика по Y
+              double clickedWorldY = rawY + _editorCameraY;
+
+              // Запрещаем кликать выше неба (60) или ниже/на уровне синей платформы пола (_floorY)
+              // С учетом шага сетки в 30px, постройка не должна пересекать _floorY
+              if (clickedWorldY >= _floorY || rawY < 60) return;
 
               double step = 30.0;
-              
-              // Координата X остается прежней (с учетом горизонтального скролла)
               double worldX = (((rawX + _editorCameraX) / step).floor() * step);
               
-              // ======================================================================
-              // ИСПРАВЛЕНИЕ: МАТЕМАТИКА МАГНИТНОЙ СЕТКИ ОТТАЛКИВАЕТСЯ СТРОГО ОТ ПОЛА!
-              // ======================================================================
-              // Мы берем абсолютную координату клика с учетом вертикальной камеры,
-              // вычитаем её из линии пола (500) и округляем по шагу 30 вверх.
-              // Это гарантирует, что первый ряд над платформой будет целым (ровно 30px),
-              // а постройки встанут строго НА синюю линию горизонта без проваливаний!
-              double relativeYFromFloor = (_floorY - (rawY + _editorCameraY));
+              double relativeYFromFloor = (_floorY - clickedWorldY);
               double snappedRelativeY = (relativeYFromFloor / step).floor() * step;
               double worldY = _floorY - snappedRelativeY;
 
+              // Защитный барьер: если округление пытается вытолкнуть блок на уровень пола или под него
+              if (worldY >= _floorY) return;
+
               _takeSnapshot();
+
 
               setState(() {
                 if (_isEraserMode) {
@@ -2397,7 +2411,16 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             }, minWidth: 280),
 
             
-            _buildBtn('Сохранить и Выйти', () {
+                        _buildBtn('Сохранить и Выйти', () {
+              // ИСПРАВЛЕНИЕ: Перед выходом высчитываем крайний объект и двигаем портал финиша
+              if (_currentEditingLevel != null) {
+                double farthestX = 2000.0; // Базовый минимум
+                for (var obs in _currentEditingLevel!.obstacles) { if (obs.x > farthestX) farthestX = obs.x; }
+                for (var orb in _currentEditingLevel!.orbs) { if (orb.x > farthestX) farthestX = orb.x; }
+                for (var m in _currentEditingLevel!.medals) { if (m.x > farthestX) farthestX = m.x; }
+                _levelLength = farthestX + 800.0; // Сдвигаем геймплейный портал финиша
+              }
+
               _saveCustomLevelsToPrefs();
               setState(() {
                 _isPaused = false;
@@ -2406,9 +2429,19 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             }, minWidth: 280),
             
             _buildBtn('Сохранить изменения', () {
+              // ИСПРАВЛЕНИЕ: Дублируем математику сжатия уровня для этой кнопки
+              if (_currentEditingLevel != null) {
+                double farthestX = 2000.0;
+                for (var obs in _currentEditingLevel!.obstacles) { if (obs.x > farthestX) farthestX = obs.x; }
+                for (var orb in _currentEditingLevel!.orbs) { if (orb.x > farthestX) farthestX = orb.x; }
+                for (var m in _currentEditingLevel!.medals) { if (m.x > farthestX) farthestX = m.x; }
+                _levelLength = farthestX + 800.0;
+              }
+
               _saveCustomLevelsToPrefs();
               setState(() { _isPaused = false; });
             }, minWidth: 280),
+
             
             _buildBtn('Выйти без сохранения', () {
               showDialog(
@@ -2927,13 +2960,22 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             right: 20,
             child: IconButton(
               icon: const Icon(Icons.pause_circle_filled, size: 40, color: Colors.white),
-              onPressed: () {
-                setState(() {
-                  _isPaused = true;
-                  _isPressing = false; // ИСПРАВЛЕНИЕ: Сбрасываем флаг, убирая "призрачный прыжок"
-                  _stopAllLevelTracks();
-                });
-              },
+               onPressed: () {
+              // ИСПРАВЛЕНИЕ: Ставим нужный плеер на паузу вместо полного стопа
+              AudioPlayer activePlayer;
+              if (_currentLevel == 5) activePlayer = _level1Player;
+              else if (_currentLevel == 1) activePlayer = _level1Player;
+              else if (_currentLevel == 2) activePlayer = _level2Player;
+              else if (_currentLevel == 3) activePlayer = _level3Player;
+              else activePlayer = _level4Player;
+              
+              activePlayer.pause(); // Музыка замирает на текущей секунде
+
+              setState(() {
+                _isPaused = true;
+                _isPressing = false;
+              });
+            },
             ),
           ),
           if (_isPaused) _buildPauseOverlay(),
