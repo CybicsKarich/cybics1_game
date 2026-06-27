@@ -315,7 +315,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     _deathPlayer.setVolume(vol * 0.5);
   }
 
-      void _startMusicSequencer() async {
+    void _startMusicSequencer() async {
     try {
       await _menuPlayer.setReleaseMode(ReleaseMode.loop);
       await _level1Player.setReleaseMode(ReleaseMode.loop);
@@ -326,12 +326,18 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       if (_state == GameState.gameplay) {
         await _menuPlayer.stop();
 
+        // Если мы НЕ на кастомном уровне, принудительно выключаем музыку редактора,
+        // чтобы кастомный трек не накладывался на обычные уровни игры
+        if (_currentLevel != 5) {
+          await _level1Player.stop();
+        }
+
         AudioPlayer activePlayer;
         String trackAsset;
 
-        if (_currentEditingLevel != null) {
+        if (_currentLevel == 5 && _currentEditingLevel != null) {
           trackAsset = _currentEditingLevel!.selectedMusic;
-          activePlayer = _level1Player; // Кастомные уровни используют первый плеер
+          activePlayer = _level1Player; 
         } else {
           if (_currentLevel == 1) { activePlayer = _level1Player; trackAsset = 'level1.mp3'; }
           else if (_currentLevel == 2) { activePlayer = _level2Player; trackAsset = 'level2.mp3'; }
@@ -340,19 +346,17 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         }
 
         if (trackAsset != 'none') {
-          // ИСПРАВЛЕНИЕ: Если игра была на паузе, просто снимаем с паузы (.resume)
+          // Если игра была на паузе — снимаем с паузы и продолжаем с того же места
           if (_isPaused) {
             await activePlayer.resume();
           } else {
-            // Если это совершенно новый старт раунда, глушим остальные треки и запускаем с нуля
-            await _stopAllLevelTracks();
+            // Если это обычный старт раунда — отматываем на 0 и запускаем сначала
             await activePlayer.seek(Duration.zero);
             await activePlayer.play(AssetSource(trackAsset));
           }
-        } else {
-          await _stopAllLevelTracks();
         }
       } else {
+        // Если вышли в меню — глушим абсолютно всё и включаем музыку меню
         await _stopAllLevelTracks();
         await _menuPlayer.play(AssetSource('menu.mp3'));
       }
@@ -360,6 +364,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       debugPrint("Ошибка аудиосеквенсора: $e");
     }
   }
+
 
 
 
@@ -374,12 +379,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     }
   }
 
-      void _playDeathSound() async {
+    void _playDeathSound() async {
     try {
       _deathVolumeTimer?.cancel(); 
-      await _deathPlayer.stop();
-      await _deathPlayer.setVolume((_volume / 100.0) * 0.2);
-      await _deathPlayer.play(AssetSource('death.mp3'));
 
       AudioPlayer activePlayer;
       String trackAsset;
@@ -394,21 +396,26 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         else { activePlayer = _level4Player; trackAsset = 'level4.mp3'; }
       }
 
+      // Принудительно останавливаем музыку уровня на время взрыва
+      await activePlayer.stop();
+
+      // Воспроизводим звук смерти
+      await _deathPlayer.stop();
+      await _deathPlayer.setVolume((_volume / 100.0) * 0.4);
+      await _deathPlayer.play(AssetSource('death.mp3'));
+
       if (trackAsset != 'none') {
         double normalVol = _volume / 100.0;
-        await activePlayer.setVolume(normalVol * 0.2);
-        // ИСПРАВЛЕНИЕ: Принудительно отматываем в самое начало
+        // Возвращаем громкость, отматываем на начало и запускаем заново
+        await activePlayer.setVolume(normalVol);
         await activePlayer.seek(Duration.zero);
-        await activePlayer.resume();
-
-        _deathVolumeTimer = Timer(const Duration(milliseconds: 300), () async {
-          await activePlayer.setVolume(normalVol);
-        });
+        await activePlayer.play(AssetSource(trackAsset));
       }
     } catch (e) {
       debugPrint("Ошибка перезапуска музыки при смерти: $e");
     }
   }
+
 
 
   double _seededRandom(int seed) {
@@ -2130,40 +2137,68 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
 
               setState(() {
-                if (_isEraserMode) {
+                  if (_isEraserMode) {
                   bool removed = false;
+                  
+                  // 1. Стирание препятствий (Платформы и Шипы)
                   for (int i = _currentEditingLevel!.obstacles.length - 1; i >= 0; i--) {
                     var obs = _currentEditingLevel!.obstacles[i];
-                    double width = obs.w > 0 ? obs.w : 30.0;
-                    double height = obs.h > 0 ? obs.h : 30.0;
-                    if (worldX >= obs.x && worldX < obs.x + width && worldY >= obs.y && worldY < obs.y + height) {
+                    
+                    // Определяем реальные размеры объекта для точного клика стёркой
+                    double width = 30.0;
+                    double height = 30.0;
+                    double actualY = obs.y;
+
+                    if (obs.type == 'platform') {
+                      width = obs.w > 0 ? obs.w : 30.0;
+                      height = obs.h > 0 ? obs.h : 30.0;
+                    } else if (obs.type == 'spike' || obs.type == 'spike_mark') {
+                      // Обычные шипы растут вверх от линии worldY, их верхушка на 30px выше основания
+                      actualY = obs.y - 30; 
+                    } else if (obs.type == 'spike_upside') {
+                      // Перевернутые шипы растут вниз
+                      actualY = obs.y;
+                    } else if (obs.type == 'portal_ship' || obs.type == 'portal_grav') {
+                      width = 40.0;
+                      height = 400.0;
+                      actualY = 100.0; // Порталы всегда привязаны к высоте 100
+                    }
+
+                    // Проверяем, попадает ли координата клика (worldX, worldY) внутрь границ постройки
+                    if (worldX >= obs.x && worldX < obs.x + width && worldY >= actualY && worldY < actualY + height) {
                       _currentEditingLevel!.obstacles.removeAt(i);
                       removed = true;
                       break;
                     }
                   }
+                  
+                  // 2. Стирание сфер (если блоки не найдены)
                   if (!removed) {
                     for (int i = _currentEditingLevel!.orbs.length - 1; i >= 0; i--) {
                       var orb = _currentEditingLevel!.orbs[i];
-                      if ((worldX - orb.x).abs() < 30 && (worldY - orb.y).abs() < 30) {
+                      // Проверка попадания в радиус сферы
+                      if ((worldX - (orb.x - 15)).abs() < 30 && (worldY - (orb.y - 15)).abs() < 30) {
                         _currentEditingLevel!.orbs.removeAt(i);
                         removed = true;
                         break;
                       }
                     }
                   }
+                  
+                  // 3. Стирание медалей
                   if (!removed) {
                     for (int i = _currentEditingLevel!.medals.length - 1; i >= 0; i--) {
                       var m = _currentEditingLevel!.medals[i];
-                      if ((worldX - m.x).abs() < 30 && (worldY - m.y).abs() < 30) {
+                      if ((worldX - (m.x - 15)).abs() < 30 && (worldY - (m.y - 15)).abs() < 30) {
                         _currentEditingLevel!.medals.removeAt(i);
                         removed = true;
                         break;
                       }
                     }
                   }
+                  
                   if (!removed && _undoHistory.isNotEmpty) _undoHistory.removeLast();
-                } 
+                }  
                 else {
                   if (_editorSelectedTool.startsWith('platform')) {
                     double width = 60;
@@ -2960,8 +2995,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             right: 20,
             child: IconButton(
               icon: const Icon(Icons.pause_circle_filled, size: 40, color: Colors.white),
-               onPressed: () {
-              // ИСПРАВЛЕНИЕ: Ставим нужный плеер на паузу вместо полного стопа
+                           onPressed: () {
               AudioPlayer activePlayer;
               if (_currentLevel == 5) activePlayer = _level1Player;
               else if (_currentLevel == 1) activePlayer = _level1Player;
@@ -2969,11 +3003,12 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               else if (_currentLevel == 3) activePlayer = _level3Player;
               else activePlayer = _level4Player;
               
-              activePlayer.pause(); // Музыка замирает на текущей секунде
+              // Музыка полностью замирает на текущем моменте времени
+              activePlayer.pause(); 
 
               setState(() {
                 _isPaused = true;
-                _isPressing = false;
+                _isPressing = false; 
               });
             },
             ),
