@@ -190,6 +190,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   final AudioPlayer _level2Player = AudioPlayer();
   final AudioPlayer _level3Player = AudioPlayer();
   final AudioPlayer _level4Player = AudioPlayer();
+  final AudioPlayer _customLevelPlayer = AudioPlayer();
   final AudioPlayer _deathPlayer = AudioPlayer();
 
   double _volume = 50.0;
@@ -312,27 +313,29 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     _level2Player.setVolume(vol);
     _level3Player.setVolume(vol);
     _level4Player.setVolume(vol);
+    _customLevelPlayer.setVolume(vol);
     _deathPlayer.setVolume(vol * 0.5);
   }
 
-        void _startMusicSequencer() async {
+    void _startMusicSequencer() async {
     try {
       await _menuPlayer.setReleaseMode(ReleaseMode.loop);
       await _level1Player.setReleaseMode(ReleaseMode.loop);
       await _level2Player.setReleaseMode(ReleaseMode.loop);
       await _level3Player.setReleaseMode(ReleaseMode.loop);
       await _level4Player.setReleaseMode(ReleaseMode.loop);
+      await _customLevelPlayer.setReleaseMode(ReleaseMode.loop);
 
       if (_state == GameState.gameplay) {
         await _menuPlayer.stop();
 
+        // 1. ОПРЕДЕЛЯЕМ АКТИВНЫЙ ПЛЕЕР ДЛЯ ТЕКУЩЕГО РАУНДА
         AudioPlayer activePlayer;
         String trackAsset;
 
-        // Строго определяем плеер и трек для текущего уровня
         if (_currentLevel == 5 && _currentEditingLevel != null) {
           trackAsset = _currentEditingLevel!.selectedMusic;
-          activePlayer = _level1Player; 
+          activePlayer = _customLevelPlayer; 
         } else {
           if (_currentLevel == 1) { activePlayer = _level1Player; trackAsset = 'level1.mp3'; }
           else if (_currentLevel == 2) { activePlayer = _level2Player; trackAsset = 'level2.mp3'; }
@@ -340,34 +343,38 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           else { activePlayer = _level4Player; trackAsset = 'level4.mp3'; }
         }
 
+        // 2. УПРАВЛЯЕМ ВОСПРОИЗВЕДЕНИЕМ БЕЗ СБРОСА ССЫЛОК
         if (trackAsset != 'none') {
           if (_isPaused) {
-            // ИСПРАВЛЕНИЕ: Музыка была на паузе — просто снимаем с паузы, нативный индекс сохранен!
+            // Если выходим из паузы — просто возобновляем воспроизведение (нативный индекс сохранен!)
             await activePlayer.resume();
           } else {
-            // ИСПРАВЛЕНИЕ: Это новый старт раунда — только тогда ставим на паузу старые плееры,
-            // а для текущего плеера принудительно делаем сброс позиции и полноценный запуск!
-            if (_currentLevel != 1) await _level1Player.pause();
-            if (_currentLevel != 2) await _level2Player.pause();
-            if (_currentLevel != 3) await _level3Player.pause();
-            if (_currentLevel != 4) await _level4Player.pause();
+            // Если это новый старт раунда — ставим фоновые плееры на паузу, чтобы они не кричали
+            if (activePlayer != _level1Player) await _level1Player.pause();
+            if (activePlayer != _level2Player) await _level2Player.pause();
+            if (activePlayer != _level3Player) await _level3Player.pause();
+            if (activePlayer != _level4Player) await _level4Player.pause();
+            if (activePlayer != _customLevelPlayer) await _customLevelPlayer.pause();
 
+            // Запускаем текущий трек строго с начала
             await activePlayer.seek(Duration.zero);
             await activePlayer.play(AssetSource(trackAsset));
           }
         }
       } else {
-        // Если игрок вышел в меню — глушим все игровые плееры через pause (чтобы не ломать ресурсы)
+        // Если вышли в меню — приостанавливаем игровые плееры и зацикливаем меню
         await _level1Player.pause();
         await _level2Player.pause();
         await _level3Player.pause();
         await _level4Player.pause();
+        await _customLevelPlayer.pause();
         await _menuPlayer.play(AssetSource('menu.mp3'));
       }
     } catch (e) {
       debugPrint("Ошибка аудиосеквенсора: $e");
     }
   }
+
 
 
 
@@ -382,7 +389,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     }
   }
 
-      void _playDeathSound() async {
+        void _playDeathSound() async {
     try {
       _deathVolumeTimer?.cancel(); 
 
@@ -390,7 +397,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       String trackAsset;
 
       if (_currentLevel == 5 && _currentEditingLevel != null) {
-        activePlayer = _level1Player;
+        activePlayer = _customLevelPlayer;
         trackAsset = _currentEditingLevel!.selectedMusic;
       } else {
         if (_currentLevel == 1) { activePlayer = _level1Player; trackAsset = 'level1.mp3'; }
@@ -399,27 +406,26 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         else { activePlayer = _level4Player; trackAsset = 'level4.mp3'; }
       }
 
-      // Вместо жесткого stop() временно глушим громкость плеера уровня до нуля
-      await activePlayer.setVolume(0.0);
+      // Приостанавливаем трек
+      await activePlayer.pause();
 
-      // Воспроизводим взрыв смерти
+      // Играем взрыв смерти
       await _deathPlayer.stop();
       await _deathPlayer.setVolume((_volume / 100.0) * 0.4);
       await _deathPlayer.play(AssetSource('death.mp3'));
 
       if (trackAsset != 'none') {
         double normalVol = _volume / 100.0;
-        // Мгновенно отматываем трек назад и возвращаем исходный уровень звука раунда
-        await activePlayer.seek(Duration.zero);
         await activePlayer.setVolume(normalVol);
+        
+        // Отматываем в самое начало и включаем заново
+        await activePlayer.seek(Duration.zero);
         await activePlayer.resume();
       }
     } catch (e) {
       debugPrint("Ошибка перезапуска музыки при смерти: $e");
     }
   }
-
-
 
 
   double _seededRandom(int seed) {
@@ -2431,14 +2437,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             const SizedBox(height: 20),
             
                         _buildBtn('Продолжить', () {
-              // ИСПРАВЛЕНИЕ: Синхронно восстанавливаем воспроизведение трека для редактора
-              _startMusicSequencer();
-              setState(() { 
-                _isPaused = false; 
-              });
+              _startMusicSequencer(); // Сначала снимаем плеер с удержания
+              setState(() { _isPaused = false; });
             }, minWidth: 280),
-            
-
             
                         // 2. Сохранить изменения и сразу запустить тест уровня
             _buildBtn('Сохранить и Играть', () {
@@ -3007,20 +3008,20 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             right: 20,
             child: IconButton(
               icon: const Icon(Icons.pause_circle_filled, size: 40, color: Colors.white),
-                           onPressed: () {
+                          onPressed: () {
+              // ИСПРАВЛЕНИЕ: Ставим на паузу именно тот плеер, который сейчас поет
               AudioPlayer activePlayer;
-              if (_currentLevel == 5) activePlayer = _level1Player;
+              if (_currentLevel == 5) activePlayer = _customLevelPlayer;
               else if (_currentLevel == 1) activePlayer = _level1Player;
               else if (_currentLevel == 2) activePlayer = _level2Player;
               else if (_currentLevel == 3) activePlayer = _level3Player;
               else activePlayer = _level4Player;
               
-              // Музыка полностью замирает на текущем моменте времени
-              activePlayer.pause(); 
+              activePlayer.pause(); // Замораживаем воспроизведение
 
               setState(() {
                 _isPaused = true;
-                _isPressing = false; 
+                _isPressing = false;
               });
             },
             ),
@@ -3049,12 +3050,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             const Text('ПАУЗА', style: TextStyle(fontSize: 44, color: Color(0xFF00F2FE), fontWeight: FontWeight.bold)),
             Text('Рекорд уровня: $currentRecord%', style: const TextStyle(fontSize: 18, color: Colors.grey)),
             const SizedBox(height: 30),
-            _buildBtn('Продолжить', () async {
-              // ИСПРАВЛЕНИЕ: Сначала снимаем плеер с паузы, затем обновляем стейт флага
-              _startMusicSequencer();
-              setState(() { 
-                _isPaused = false; 
-              });
+               _buildBtn('Продолжить', () {
+              _startMusicSequencer(); // Сначала запускаем resume плеера
+              setState(() { _isPaused = false; });
             }),
              _buildBtn('В меню', () {
               // ИСПРАВЛЕНИЕ ОШИБКИ 3: Гарантированно глушим все таймеры при выходе
@@ -3197,6 +3195,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     _level2Player.dispose();
     _level3Player.dispose();
     _level4Player.dispose();
+    _customLevelPlayer.dispose();
     _searchController.dispose();
     _levelNameController.dispose();
     _consoleController.dispose();
