@@ -2427,9 +2427,15 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             const Text('ПАУЗА РЕДАКТОРА', style: TextStyle(fontSize: 36, color: Color(0xFF00F2FE), fontWeight: FontWeight.bold, letterSpacing: 2)),
             const SizedBox(height: 20),
             
-            _buildBtn('Продолжить', () 
-            _startMusicSequencer();
-           { setState(() { _isPaused = false; }); }, minWidth: 280),
+                        _buildBtn('Продолжить', () {
+              // Здесь тоже код должен быть внутри фигурных скобок
+              _startMusicSequencer();
+              
+              setState(() { 
+                _isPaused = false; 
+              });
+            }),
+
             
                         // 2. Сохранить изменения и сразу запустить тест уровня
             _buildBtn('Сохранить и Играть', () {
