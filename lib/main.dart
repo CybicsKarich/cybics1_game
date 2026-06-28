@@ -185,10 +185,15 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   List<bool> _savedMedals3 = [false, false, false];
   List<bool> _savedMedals4 = [false, false, false];
 
-    // ИСПРАВЛЕНИЕ: Один плеер для всей игры, чтобы Android не блокировал аудио-каналы
+    // ИСПРАВЛЕНИЕ: Вернули раздельные плееры для каждого уровня раунда
   final AudioPlayer _menuPlayer = AudioPlayer();
-  final AudioPlayer _gamePlayer = AudioPlayer(); 
+  final AudioPlayer _level1Player = AudioPlayer();
+  final AudioPlayer _level2Player = AudioPlayer();
+  final AudioPlayer _level3Player = AudioPlayer();
+  final AudioPlayer _level4Player = AudioPlayer();
+  final AudioPlayer _level5Player = AudioPlayer(); // Плеер для кастомного 5-го уровня
   final AudioPlayer _deathPlayer = AudioPlayer();
+
 
   double _volume = 50.0;
   bool _showPercent = true;
@@ -306,45 +311,66 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     void _updatePlayersVolume() {
     double vol = _volume / 100.0;
     _menuPlayer.setVolume(vol * 0.5);
-    _gamePlayer.setVolume(vol); // Настройка одного игрового плеера
+    _level1Player.setVolume(vol);
+    _level2Player.setVolume(vol);
+    _level3Player.setVolume(vol);
+    _level4Player.setVolume(vol);
+    _level5Player.setVolume(vol); // Добавили громкость 5 уровня
     _deathPlayer.setVolume(vol * 0.5);
   }
 
 
-      void _startMusicSequencer() async {
+
+    void _startMusicSequencer() async {
     try {
       await _menuPlayer.setReleaseMode(ReleaseMode.loop);
-      await _gamePlayer.setReleaseMode(ReleaseMode.loop); // Зацикливание игрового плеера
+      await _level1Player.setReleaseMode(ReleaseMode.loop);
+      await _level2Player.setReleaseMode(ReleaseMode.loop);
+      await _level3Player.setReleaseMode(ReleaseMode.loop);
+      await _level4Player.setReleaseMode(ReleaseMode.loop);
+      await _level5Player.setReleaseMode(ReleaseMode.loop);
 
       if (_state == GameState.gameplay) {
         await _menuPlayer.stop();
 
+        // Находим плеер строго под текущий запущенный уровень
+        AudioPlayer activePlayer;
         String trackAsset;
+
         if (_currentLevel == 5 && _currentEditingLevel != null) {
           trackAsset = _currentEditingLevel!.selectedMusic;
+          activePlayer = _level5Player; 
         } else {
-          if (_currentLevel == 1) trackAsset = 'level1.mp3';
-          else if (_currentLevel == 2) trackAsset = 'level2.mp3';
-          else if (_currentLevel == 3) trackAsset = 'level3.mp3';
-          else trackAsset = 'level4.mp3';
+          if (_currentLevel == 1) { activePlayer = _level1Player; trackAsset = 'level1.mp3'; }
+          else if (_currentLevel == 2) { activePlayer = _level2Player; trackAsset = 'level2.mp3'; }
+          else if (_currentLevel == 3) { activePlayer = _level3Player; trackAsset = 'level3.mp3'; }
+          else { activePlayer = _level4Player; trackAsset = 'level4.mp3'; }
         }
 
         if (trackAsset != 'none') {
           if (_isPaused) {
-            // Музыка стояла на паузе — бесшовно продолжаем играть с сохраненной секунды
-            await _gamePlayer.resume();
+            // ИСПРАВЛЕНИЕ: Игра стояла на паузе — просто вызываем resume, подхватывая старую секунду!
+            await activePlayer.resume();
           } else {
-            // Новый раунд — сбрасываем плеер и принудительно подгружаем нужный ассет
-            await _gamePlayer.stop();
-            await _gamePlayer.setSource(AssetSource(trackAsset));
-            await _gamePlayer.resume();
+            // Новый старт раунда — мягко приостанавливаем ВСЕ остальные дорожки, чтобы они не накладывались
+            if (activePlayer != _level1Player) await _level1Player.pause();
+            if (activePlayer != _level2Player) await _level2Player.pause();
+            if (activePlayer != _level3Player) await _level3Player.pause();
+            if (activePlayer != _level4Player) await _level4Player.pause();
+            if (activePlayer != _level5Player) await _level5Player.pause();
+
+            // Перематываем активный плеер на старт и запускаем чистый play
+            await activePlayer.seek(Duration.zero);
+            await activePlayer.play(AssetSource(trackAsset));
           }
-        } else {
-          await _gamePlayer.stop();
         }
       } else {
-        // Вышли в меню — глушим игру, включаем музыку меню
-        await _gamePlayer.stop();
+        // Если вышли в меню — ставим игровые плееры на паузу (сохраняя ассеты в памяти), включаем музыку меню
+        await _level1Player.pause();
+        await _level2Player.pause();
+        await _level3Player.pause();
+        await _level4Player.pause();
+        await _level5Player.pause();
         await _menuPlayer.play(AssetSource('menu.mp3'));
       }
     } catch (e) {
@@ -352,51 +378,60 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     }
   }
 
-  Future<void> _stopAllLevelTracks() async {
+
+    Future<void> _stopAllLevelTracks() async {
     try {
-      // ИСПРАВЛЕНИЕ: Глушим один игровой плеер вместо четырех старых
-      await _gamePlayer.stop();
+      // ИСПРАВЛЕНИЕ: Переводим плееры в режим ожидания вместо деструктивного стопа
+      await _level1Player.pause();
+      await _level2Player.pause();
+      await _level3Player.pause();
+      await _level4Player.pause();
+      await _level5Player.pause();
     } catch (e) {
       debugPrint("Ошибка остановки треков: $e");
     }
   }
 
 
-      void _playDeathSound() async {
+
+    void _playDeathSound() async {
     try {
       _deathVolumeTimer?.cancel(); 
 
-      // На время взрыва уводим громкость игры в ноль, чтобы она не перебивала эффект
-      await _gamePlayer.setVolume(0.0);
-      await _gamePlayer.pause();
-      await _gamePlayer.seek(Duration.zero); // Отматываем на начало раунда
+      AudioPlayer activePlayer;
+      String trackAsset;
 
-      // Играем звук смерти
+      if (_currentLevel == 5 && _currentEditingLevel != null) {
+        activePlayer = _level5Player;
+        trackAsset = _currentEditingLevel!.selectedMusic;
+      } else {
+        if (_currentLevel == 1) { activePlayer = _level1Player; trackAsset = 'level1.mp3'; }
+        else if (_currentLevel == 2) { activePlayer = _level2Player; trackAsset = 'level2.mp3'; }
+        else if (_currentLevel == 3) { activePlayer = _level3Player; trackAsset = 'level3.mp3'; }
+        else { activePlayer = _level4Player; trackAsset = 'level4.mp3'; }
+      }
+
+      // Уводим звук игры в ноль, чтобы взрыв смерти звучал четко
+      await activePlayer.setVolume(0.0);
+      await activePlayer.pause();
+
+      // Проигрываем эффект взрыва кубика
       await _deathPlayer.stop();
       await _deathPlayer.setVolume((_volume / 100.0) * 0.4);
       await _deathPlayer.play(AssetSource('death.mp3'));
 
-      String trackAsset;
-      if (_currentLevel == 5 && _currentEditingLevel != null) {
-        trackAsset = _currentEditingLevel!.selectedMusic;
-      } else {
-        if (_currentLevel == 1) trackAsset = 'level1.mp3';
-        else if (_currentLevel == 2) trackAsset = 'level2.mp3';
-        else if (_currentLevel == 3) trackAsset = 'level3.mp3';
-        else trackAsset = 'level4.mp3';
-      }
-
       if (trackAsset != 'none') {
         double normalVol = _volume / 100.0;
-        // Возвращаем исходную громкость и снимаем с паузы — трек зазвучит строго с 0-й секунды
-        await _gamePlayer.setVolume(normalVol);
-        await _gamePlayer.resume();
+        await activePlayer.setVolume(normalVol);
+        
+        // ИСПРАВЛЕНИЕ: Отматываем трек текущего уровня на 0-ю секунду раунда и возобновляем игру
+        await activePlayer.seek(Duration.zero);
+        await activePlayer.resume();
       }
     } catch (e) {
       debugPrint("Ошибка перезапуска музыки при смерти: $e");
     }
   }
-
 
 
   double _seededRandom(int seed) {
@@ -821,7 +856,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
       _generateFixedLevel();
 
-            if (_currentLevel == 5 && _currentEditingLevel != null) {
+                if (_currentLevel == 5 && _currentEditingLevel != null) {
         _obstacles = List.from(_currentEditingLevel!.obstacles);
         _orbs = _currentEditingLevel!.orbs.map((orb) => orb.clone()).toList();
         _medals = List.from(_currentEditingLevel!.medals);
@@ -833,21 +868,15 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         
         _levelLength = farthestX + 800.0; 
         
-        // ИСПРАВЛЕНИЕ: Работаем со сбросом кастомного трека через единый игровой плеер
-        await _gamePlayer.stop();
+        // ИСПРАВЛЕНИЕ КОДИРОВАНИЯ: Работаем исключительно с _level5Player для кастомных карт
+        await _level5Player.pause();
         if (_currentEditingLevel!.selectedMusic != 'none') {
-          await _gamePlayer.setSource(AssetSource(_currentEditingLevel!.selectedMusic));
-          await _gamePlayer.resume();
+          await _level5Player.seek(Duration.zero);
         }
       } else {
         _levelLength = 20000.0; 
-        // ИСПРАВЛЕНИЕ 4: Для обычных уровней сбрасываем статус собранных медалей
-        for (var m in _medals) {
-          m.collected = false;
-        }
-        for (var orb in _orbs) {
-          orb.collected = false;
-        }
+        for (var m in _medals) { m.collected = false; }
+        for (var orb in _orbs) { orb.collected = false; }
       }
     });
 
@@ -2972,9 +3001,16 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             right: 20,
             child: IconButton(
               icon: const Icon(Icons.pause_circle_filled, size: 40, color: Colors.white),
-                          onPressed: () async {
-              // Просто ставим единый игровой плеер на паузу, сохраняя позицию в Android
-              await _gamePlayer.pause(); 
+               onPressed: () async {
+              AudioPlayer activePlayer;
+              if (_currentLevel == 5) activePlayer = _level5Player;
+              else if (_currentLevel == 1) activePlayer = _level1Player;
+              else if (_currentLevel == 2) activePlayer = _level2Player;
+              else if (_currentLevel == 3) activePlayer = _level3Player;
+              else activePlayer = _level4Player;
+              
+              // Замораживаем плеер текущего раунда на месте
+              await activePlayer.pause(); 
 
               setState(() {
                 _isPaused = true;
@@ -3046,7 +3082,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
 
-      Widget _buildVictoryOverlay() {
+    Widget _buildVictoryOverlay() {
     return Container(
       color: Colors.black.withOpacity(0.9),
       child: Center(
@@ -3064,16 +3100,14 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             ),
             const SizedBox(height: 40),
             _buildBtn('ОК', () async {
-              // ИСПРАВЛЕНИЕ: Полностью останавливаем игровой плеер текущего уровня
-              await _gamePlayer.stop();
+              // Приостанавливаем игровые треки перед выходом
+              await _stopAllLevelTracks();
 
               setState(() {
-                // Возвращаем игрока туда, откуда он пришел (Поиск, Редактор или обычное Меню)
                 _state = _currentLevel == 5 ? _customLevelLaunchSource : GameState.levelsMenu;
                 _showVictory = false;
               });
 
-              // Запускаем музыку главного меню (menu.mp3) через секвенсор
               _startMusicSequencer();
             }),
           ],
@@ -3153,13 +3187,18 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     _gameTimer?.cancel();
     _retryTimer?.cancel();
     _menuPlayer.dispose();
-    _gamePlayer.dispose(); // Очистка игрового плеера
+    _level1Player.dispose();
+    _level2Player.dispose();
+    _level3Player.dispose();
+    _level4Player.dispose();
+    _level5Player.dispose(); // Очистка 5 уровня
     _deathPlayer.dispose();
     _searchController.dispose();
     _levelNameController.dispose();
     _consoleController.dispose();
     super.dispose();
   }
+
 
 
 class GamePainter extends CustomPainter {
